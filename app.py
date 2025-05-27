@@ -1,58 +1,156 @@
-import os
 import streamlit as st
+import os
+import time
 from openai import OpenAI
 from dotenv import load_dotenv
-import json
-import glob
+import datetime
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
-# Set page config
+# Page configuration
 st.set_page_config(
-    page_title="HAI-5014's Second Chatbot",
+    page_title="Debate with Greeni: Pet Cloning",
     page_icon="🤖",
     layout="wide"
 )
 
-# Initialize session state variables if they don't exist
+# Initialize session state variables
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "How can I help you today?"}]
+    st.session_state.messages = []
+
+if "conversation_started" not in st.session_state:
+    st.session_state.conversation_started = False
+
+if "max_turns" not in st.session_state:
+    st.session_state.max_turns = 4  # Default to 4 turns
+
+if "current_turn" not in st.session_state:
+    st.session_state.current_turn = 0
 
 if "system_message" not in st.session_state:
-    st.session_state.system_message = "You are a helpful assistant."
+    st.session_state.system_message = """You are Greeni, a balanced debate chatbot that discusses controversial topics from multiple perspectives.
+For every user prompt, respond with exactly 8 concise and balanced sentences:
 
-if "usage_stats" not in st.session_state:
-    st.session_state.usage_stats = []
+The first 4 sentences must support the topic.
 
-if "selected_experiment" not in st.session_state:
-    st.session_state.selected_experiment = None
+The next 4 sentences must oppose the topic.
+Avoid using section headers such as "Pros" or "Cons," "For" or "Against."
+Keep your tone neutral and informative.
+Do not repeat the question.
+Do not label your responses. Just give the 8 sentences in one continuous, paragraph-style response."""
 
-if "selected_condition" not in st.session_state:
-    st.session_state.selected_condition = None
+if "interaction_start" not in st.session_state:
+    st.session_state.interaction_start = None
 
-if "show_process" not in st.session_state:
-    st.session_state.show_process = False
+if "token_usage" not in st.session_state:
+    st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
-def load_experiments():
-    """Load all experiment JSON files from the prompts directory"""
-    experiments = []
-    prompts_dir = os.path.join(os.getcwd(), "prompts")
+# CSS styling
+st.markdown("""
+<style>
+    .chat-container {
+        margin-bottom: 100px;
+    }
     
-    if not os.path.exists(prompts_dir):
-        return experiments
+    .user-bubble {
+        background-color: #e6f2ff;
+        padding: 12px;
+        border-radius: 18px 18px 0 18px;
+        margin-bottom: 16px;
+        text-align: left;
+        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        margin-left: auto;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
     
-    json_files = glob.glob(os.path.join(prompts_dir, "*.json"))
+    .bot-bubble {
+        background-color: #f1f1f1;
+        padding: 12px;
+        border-radius: 18px 18px 18px 0;
+        margin-bottom: 16px;
+        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        position: relative;
+        margin-left: 50px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
     
-    for file_path in json_files:
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-                experiments.append(data)
-        except Exception as e:
-            st.warning(f"Error loading {file_path}: {str(e)}")
+    .bot-bubble::before {
+        content: "";
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #4CAF50;  /* Green color for Greeni */
+        position: absolute;
+        left: -50px;
+        top: 0;
+        background-image: url('https://cdn-icons-png.flaticon.com/512/4712/4712035.png');
+        background-size: 60%;
+        background-position: center;
+        background-repeat: no-repeat;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
     
-    return experiments
+    .bot-name {
+        font-size: 0.8em;
+        color: #4CAF50;  /* Green color for Greeni */
+        font-weight: bold;
+        margin-bottom: 4px;
+        margin-left: 0px;
+    }
+    
+    .system-message {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        border-left: 4px solid #4CAF50;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    .remaining-turns {
+        font-size: 1em;
+        margin-top: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .conversation-starter {
+        display: block;
+        margin-left: auto;
+        margin-right: 0;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 10px 20px;
+        cursor: pointer;
+        margin-top: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .instruction-box {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .stats-container {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 5px;
+        margin-top: 20px;
+    }
+    
+    .page-title {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #333;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 def get_openai_client():
     """Create and return an OpenAI client configured with environment variables"""
@@ -68,257 +166,204 @@ def get_openai_client():
         api_key=token,
     )
 
-def generate_response(prompt, system_message):
-    """Generate a response from the model and track usage"""
+def generate_response(prompt):
+    """Generate a response from the chatbot"""
+    if st.session_state.current_turn >= st.session_state.max_turns:
+        return "We've reached the maximum number of turns for this conversation. Please reset the conversation to continue."
+    
     client = get_openai_client()
     model_name = os.getenv("GITHUB_MODEL", "openai/gpt-4o")
     
-    # Prepare messages by including system message first
-    messages = [{"role": "system", "content": system_message}]
+    # Create message history for the API call
+    messages = [{"role": "system", "content": st.session_state.system_message}]
     
-    # Add all previous messages from history (excluding the newest user message that we'll add below)
-    for msg in st.session_state.messages[:-1]:  # 마지막 사용자 메시지 제외
-        if msg["role"] != "system":  # Skip system messages as we've already added it
-            messages.append(msg)
+    # Add conversation history
+    for msg in st.session_state.messages:
+        messages.append({"role": msg["role"], "content": msg["content"]})
     
-    # Add the new user message (which is already in session_state.messages)
+    # Add the current prompt
     messages.append({"role": "user", "content": prompt})
     
     try:
-        # Container for the assistant's response in the chat interface
-        response_container = st.chat_message("assistant")
-        full_response = ""
-        usage = None
+        # If this is the first turn, we want to use the predefined response
+        if st.session_state.current_turn == 0:
+            predefined_response = """For those who see pets as family, it may help ease the pain of loss. If the pet was especially healthy and smart, cloning could help preserve those good genes. And this technology could also contribute positively to the overall development of biotechnology.
+But even if the appearance is the same, the personality and behavior can be different—so it's not really the same pet. The cloning process often causes suffering or death for many animals, which raises ethical concerns. With so many abandoned animals already, it's questionable whether creating new lives this way is the right thing to do. And since cloning is so expensive, it feels unfair that only the wealthy can afford it."""
+            
+            # Update token usage (approximate since we're not actually calling the API)
+            st.session_state.token_usage["prompt_tokens"] += len(prompt.split())
+            st.session_state.token_usage["completion_tokens"] += len(predefined_response.split())
+            st.session_state.token_usage["total_tokens"] += len(prompt.split()) + len(predefined_response.split())
+            
+            # Increment turn counter
+            st.session_state.current_turn += 1
+            
+            return predefined_response
         
+        # For subsequent turns, use the API
         response = client.chat.completions.create(
-            messages=messages,
             model=model_name,
-            stream=True,
-            stream_options={'include_usage': True}
+            messages=messages,
+            temperature=0.7,
+            stream=True
         )
         
+        # Initialize placeholder for streaming response
+        placeholder = st.empty()
+        full_response = ""
+        
         # Stream the response
-        message_placeholder = response_container.empty()
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 content_chunk = chunk.choices[0].delta.content
                 full_response += content_chunk
-                message_placeholder.markdown(full_response + "▌")
-                    
-            if chunk.usage:
-                usage = chunk.usage
+                placeholder.markdown(
+                    f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{full_response}▌</div>",
+                    unsafe_allow_html=True
+                )
         
-        # Update the final response without the cursor
-        message_placeholder.markdown(full_response)
+        # Update the placeholder with the final response (no cursor)
+        placeholder.markdown(
+            f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{full_response}</div>",
+            unsafe_allow_html=True
+        )
         
-        # Add the message to history
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Update token usage (approximate)
+        st.session_state.token_usage["prompt_tokens"] += len(prompt.split())
+        st.session_state.token_usage["completion_tokens"] += len(full_response.split())
+        st.session_state.token_usage["total_tokens"] += len(prompt.split()) + len(full_response.split())
         
-        # Store usage stats if available
-        if usage:
-            # Fix for Pydantic deprecation warning - use model_dump instead of dict
-            usage_dict = usage.model_dump() if hasattr(usage, 'model_dump') else usage.dict()
-            st.session_state.usage_stats.append({
-                "prompt_tokens": usage_dict.get("prompt_tokens", 0),
-                "completion_tokens": usage_dict.get("completion_tokens", 0),
-                "total_tokens": usage_dict.get("total_tokens", 0)
-            })
+        # Increment turn counter
+        st.session_state.current_turn += 1
         
-        # If show process is enabled, display the process details AFTER the response
-        if st.session_state.show_process:
-            process_container = st.container()
-            with process_container:
-                st.markdown("### Model Process")
-                
-                # Create expanders for process details - all collapsed by default
-                request_expander = st.expander("Request Details", expanded=False)
-                with request_expander:
-                    st.markdown("**System Message:**")
-                    st.code(system_message)
-                    st.markdown("**User Input:**")
-                    st.code(prompt)
-                
-                # Container for displaying raw response
-                response_expander = st.expander("Raw Response", expanded=False)
-                with response_expander:
-                    st.code(full_response, language="markdown")
-                
-                # Container for usage stats
-                if usage:
-                    usage_expander = st.expander("Usage Statistics", expanded=False)
-                    with usage_expander:
-                        st.markdown("**Usage Statistics:**")
-                        st.markdown(f"- Prompt tokens: {usage_dict.get('prompt_tokens', 0)}")
-                        st.markdown(f"- Completion tokens: {usage_dict.get('completion_tokens', 0)}")
-                        st.markdown(f"- Total tokens: {usage_dict.get('total_tokens', 0)}")
+        return full_response
         
-        return True
     except Exception as e:
         st.error(f"Error generating response: {str(e)}")
-        return False
-
-# UI Layout
-st.title("🤖 HAI-5014's Second Chatbot")
-
-# Add CSS to make the input box stick to the bottom
-st.markdown("""
-    <style>
-    .stChatFloatingInputContainer {
-        position: fixed !important;
-        bottom: 0 !important;
-        padding: 1rem !important;
-        width: calc(100% - 250px) !important; /* Adjust for sidebar width */
-        background-color: white !important;
-        z-index: 1000 !important;
-    }
-    .main-content {
-        padding-bottom: 100px; /* Add space at the bottom for the fixed input */
-    }
-    </style>
-""", unsafe_allow_html=True)
+        return "I'm sorry, I encountered an error while processing your request."
 
 # Sidebar for settings
 with st.sidebar:
-    st.subheader("Settings")
+    st.header("Settings")
     
-    # System message editor - use the value from session_state directly
-    system_message_value = st.session_state.system_message
-    st.text_area(
-        "Edit System Message", 
-        value=system_message_value,
-        key="system_message_input",
-        height=150
+    # Max turns selection
+    st.session_state.max_turns = st.selectbox(
+        "Number of turns:",
+        options=list(range(1, 11)),
+        index=3  # Default to 4 turns (index 3 = 4)
+    )
+    
+    # Display stats in sidebar
+    if st.session_state.interaction_start:
+        st.markdown("---")
+        st.subheader("Interaction Stats")
+        
+        # Calculate elapsed time
+        elapsed_time = datetime.datetime.now() - st.session_state.interaction_start
+        elapsed_seconds = elapsed_time.total_seconds()
+        minutes = int(elapsed_seconds // 60)
+        seconds = int(elapsed_seconds % 60)
+        
+        st.markdown(f"**Interaction time:** {minutes} min {seconds} sec")
+        st.markdown(f"**Turns used:** {st.session_state.current_turn} / {st.session_state.max_turns}")
+        st.markdown("**Token Usage:**")
+        st.markdown(f"- Total: {st.session_state.token_usage['total_tokens']}")
+        st.markdown(f"- Prompt: {st.session_state.token_usage['prompt_tokens']}")
+        st.markdown(f"- Completion: {st.session_state.token_usage['completion_tokens']}")
+    
+    # System message editor
+    st.markdown("---")
+    st.subheader("System Message")
+    system_message = st.text_area(
+        "Edit the system message:",
+        value=st.session_state.system_message,
+        height=200
     )
     
     if st.button("Update System Message"):
-        st.session_state.system_message = st.session_state.system_message_input
+        st.session_state.system_message = system_message
         st.success("System message updated!")
     
-    # Experiment loader section
+    # Reset conversation button
     st.markdown("---")
-    st.subheader("Experiment Loader")
-    
-    experiments = load_experiments()
-    if experiments:
-        # First dropdown: select experiment with a blank default option
-        experiment_names = ["Select an experiment"] + [exp.get('experiment_name', "Unnamed Experiment") for exp in experiments]
-        exp_index = st.selectbox(
-            "Select Experiment", 
-            range(len(experiment_names)),
-            format_func=lambda i: experiment_names[i]
-        ) 
+    if st.button("Reset Conversation"):
+        st.session_state.messages = []
+        st.session_state.conversation_started = False
+        st.session_state.current_turn = 0
+        st.session_state.interaction_start = None
+        st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        st.success("Conversation reset!")
+
+# Main content area
+# Add page title
+st.markdown("<h1 class='page-title'>Debate</h1>", unsafe_allow_html=True)
+
+st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+
+# Display the introductory message with reduced width
+st.markdown(
+    "<div class='system-message'>You are about to have a conversation with the chatbot on the topic of 'Pet Cloning.' "
+    "The conversation will include four turns, including this fixed first message, and will take approximately five minutes. "
+    "As you talk with the chatbot, try to organize your thoughts on the topic of animal cloning.</div>",
+    unsafe_allow_html=True
+)
+
+# Display remaining turns
+st.markdown(
+    f"<div class='remaining-turns'>Remaining turns: {st.session_state.max_turns - st.session_state.current_turn}</div>",
+    unsafe_allow_html=True
+)
+
+# Conversation starter button
+col1, col2 = st.columns([3, 1])
+with col2:
+    if not st.session_state.conversation_started and st.button(
+        "Greeni, explain about 'Pet cloning'", 
+        key="conversation_starter",
+        type="primary"
+    ):
+        # Start tracking time
+        st.session_state.interaction_start = datetime.datetime.now()
         
-        # Only proceed if a valid experiment is selected (not the blank option)
-        if exp_index > 0:
-            selected_experiment = experiments[exp_index - 1]  # Adjust index for the actual experiment
-            
-            # Second dropdown: select condition within the experiment with a blank default
-            if 'conditions' in selected_experiment and selected_experiment['conditions']:
-                condition_names = ["Select a condition"] + [cond.get('label', f"Condition {i+1}") 
-                                  for i, cond in enumerate(selected_experiment['conditions'])]
-                cond_index = st.selectbox(
-                    "Select Condition", 
-                    range(len(condition_names)),
-                    format_func=lambda i: condition_names[i]
-                )
-                
-                # Only enable the load button if a valid condition is selected
-                if cond_index > 0:
-                    selected_condition = selected_experiment['conditions'][cond_index - 1]  # Adjust index
-                    
-                    # Preview the system message
-                    st.markdown("### Preview: System Message")
-                    system_prompt = selected_condition.get('system_prompt', "You are a helpful assistant.")
-                    # Fix empty label warning by providing a label
-                    st.text_area(
-                        "System Prompt Preview", 
-                        value=system_prompt, 
-                        height=120, 
-                        disabled=True, 
-                        key="preview_system_message",
-                        label_visibility="collapsed"  # Hide the label but still provide one
-                    )
-                    
-                    # Load button
-                    if st.button("Load Experiment"):
-                        # Update system message
-                        st.session_state.system_message = system_prompt
-                        
-                        # Clear chat and start with opening message
-                        opening_message = selected_condition.get('opening_message', "How can I help you today?")
-                        st.session_state.messages = [{"role": "assistant", "content": opening_message}]
-                        st.session_state.usage_stats = []
-                        
-                        # Save selected experiment and condition
-                        st.session_state.selected_experiment = experiment_names[exp_index]
-                        st.session_state.selected_condition = condition_names[cond_index]
-                        
-                        st.success(f"Loaded: {experiment_names[exp_index]} - {condition_names[cond_index]}")
-                        st.rerun()
-            else:
-                st.warning("Selected experiment has no conditions.")
+        # Set conversation as started
+        st.session_state.conversation_started = True
+        
+        # Add user message
+        prompt = "Greeni, explain about 'Pet cloning'"
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Generate and add bot response
+        response = generate_response(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Force a rerun to show the messages
+        st.rerun()
+
+# Display chat messages
+for message in st.session_state.messages:
+    if message["role"] == "user":
+        st.markdown(
+            f"<div class='user-bubble'>{message['content']}</div>",
+            unsafe_allow_html=True
+        )
     else:
-        st.warning("No experiment files found in the 'prompts' directory.")
-    
-    # Chat history viewer and other sidebar elements
-    st.markdown("---")
-    
-    # Chat history viewer
-    with st.expander("View Chat History"):
-        st.json(st.session_state.messages)
-    
-    # Usage statistics viewer
-    with st.expander("View Usage Statistics"):
-        if st.session_state.usage_stats:
-            for i, usage in enumerate(st.session_state.usage_stats):
-                st.write(f"Message {i+1}:")
-                st.write(f"- Prompt tokens: {usage['prompt_tokens']}")
-                st.write(f"- Completion tokens: {usage['completion_tokens']}")
-                st.write(f"- Total tokens: {usage['total_tokens']}")
-                st.divider()
-            
-            # Calculate total usage
-            total_prompt = sum(u["prompt_tokens"] for u in st.session_state.usage_stats)
-            total_completion = sum(u["completion_tokens"] for u in st.session_state.usage_stats)
-            total = sum(u["total_tokens"] for u in st.session_state.usage_stats)
-            
-            st.write("### Total Usage")
-            st.write(f"- Total prompt tokens: {total_prompt}")
-            st.write(f"- Total completion tokens: {total_completion}")
-            st.write(f"- Total tokens: {total}")
-        else:
-            st.write("No usage data available yet.")
-    
-    # Clear chat button
-    if st.button("Clear Chat"):
-        st.session_state.messages = [{"role": "assistant", "content": "How can I help you today?"}]
-        st.session_state.usage_stats = []
-        st.success("Chat history cleared!")
-    
-    # Process display toggle - moved to bottom
-    st.markdown("---")
-    st.session_state.show_process = st.checkbox("Show Model Process (Last message)", value=st.session_state.show_process)
+        st.markdown(
+            f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
+            unsafe_allow_html=True
+        )
 
-# Main chat area with padding at bottom
-chat_container = st.container()
-with chat_container:
-    st.markdown('<div class="main-content">', unsafe_allow_html=True)  # Add a container with padding
-    
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close the container
+st.markdown("</div>", unsafe_allow_html=True)
 
-# Chat input - moved outside the main container
-if prompt := st.chat_input("Ask me anything..."):
-    # Display user message
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    # Add user message to history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Generate and display response
-    generate_response(prompt, st.session_state.system_message)
+# Chat input (only show if conversation has started and max turns not reached)
+if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
+    prompt = st.chat_input("Type your message here...")
+    if prompt:
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Generate and add bot response
+        response = generate_response(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Force a rerun to show the messages
+        st.rerun()
