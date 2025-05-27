@@ -73,15 +73,15 @@ def generate_response(prompt, system_message):
     client = get_openai_client()
     model_name = os.getenv("GITHUB_MODEL", "openai/gpt-4o")
     
-    # Prepare messages by including all history and the system message
+    # Prepare messages by including system message first
     messages = [{"role": "system", "content": system_message}]
     
-    # Add all previous messages from history
-    for msg in st.session_state.messages:
+    # Add all previous messages from history (excluding the newest user message that we'll add below)
+    for msg in st.session_state.messages[:-1]:  # 마지막 사용자 메시지 제외
         if msg["role"] != "system":  # Skip system messages as we've already added it
             messages.append(msg)
     
-    # Add the new user message
+    # Add the new user message (which is already in session_state.messages)
     messages.append({"role": "user", "content": prompt})
     
     try:
