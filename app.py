@@ -154,7 +154,7 @@ st.markdown("""
 
 def get_openai_client():
     """Create and return an OpenAI client configured with environment variables"""
-    token = os.getenv("GITHUB_TOKEN")
+    token = st.secrets["GITHUB_TOKEN"]
     endpoint = os.getenv("GITHUB_ENDPOINT", "https://models.github.ai/inference")
     
     if not token:
