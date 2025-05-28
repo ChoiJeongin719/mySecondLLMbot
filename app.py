@@ -2,11 +2,8 @@ import streamlit as st
 import os
 import time
 from openai import OpenAI
-from dotenv import load_dotenv
 import datetime
 
-# Load environment variables
-load_dotenv()
 
 # Page configuration
 st.set_page_config(
