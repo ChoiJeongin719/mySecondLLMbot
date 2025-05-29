@@ -2,8 +2,11 @@ import streamlit as st
 import os
 import time
 from openai import OpenAI
+from dotenv import load_dotenv
 import datetime
 
+# Load environment variables
+load_dotenv()
 
 # Page configuration
 st.set_page_config(
@@ -26,16 +29,11 @@ if "current_turn" not in st.session_state:
     st.session_state.current_turn = 0
 
 if "system_message" not in st.session_state:
-    st.session_state.system_message = """You are Greeni, a balanced debate chatbot that discusses controversial topics from multiple perspectives.
-For every user prompt, respond with exactly 8 concise and balanced sentences:
-
-The first 4 sentences must support the topic.
-
-The next 4 sentences must oppose the topic.
-Avoid using section headers such as "Pros" or "Cons," "For" or "Against."
-Keep your tone neutral and informative.
-Do not repeat the question.
-Do not label your responses. Just give the 8 sentences in one continuous, paragraph-style response."""
+    st.session_state.system_message = """You are Greeni, a balanced debate chatbot that discusses topics from multiple perspectives. 
+For each response, provide a balanced view with:
+- Four concise sentences supporting the topic
+- Four concise sentences against the topic
+Keep your responses educational, informative, and balanced."""
 
 if "interaction_start" not in st.session_state:
     st.session_state.interaction_start = None
@@ -56,7 +54,7 @@ st.markdown("""
         border-radius: 18px 18px 0 18px;
         margin-bottom: 16px;
         text-align: left;
-        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        max-width: 70%;  /* 너비 축소 80% -> 70% */
         margin-left: auto;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
@@ -66,7 +64,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        max-width: 70%;  /* 너비 축소 80% -> 70% */
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -102,7 +100,7 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 20px;
         border-left: 4px solid #4CAF50;
-        max-width: 700px;
+        max-width: 600px;  /* 더 줄임 700px -> 600px */
         margin-left: auto;
         margin-right: auto;
     }
@@ -151,7 +149,7 @@ st.markdown("""
 
 def get_openai_client():
     """Create and return an OpenAI client configured with environment variables"""
-    token = st.secrets["GITHUB_TOKEN"]
+    token = os.getenv("GITHUB_TOKEN")
     endpoint = os.getenv("GITHUB_ENDPOINT", "https://models.github.ai/inference")
     
     if not token:
@@ -184,8 +182,9 @@ def generate_response(prompt):
     try:
         # If this is the first turn, we want to use the predefined response
         if st.session_state.current_turn == 0:
-            predefined_response = """For those who see pets as family, it may help ease the pain of loss. If the pet was especially healthy and smart, cloning could help preserve those good genes. And this technology could also contribute positively to the overall development of biotechnology.
-But even if the appearance is the same, the personality and behavior can be different—so it's not really the same pet. The cloning process often causes suffering or death for many animals, which raises ethical concerns. With so many abandoned animals already, it's questionable whether creating new lives this way is the right thing to do. And since cloning is so expensive, it feels unfair that only the wealthy can afford it."""
+            predefined_response = """For those who see pets as family, it may help ease the pain of loss. If the pet was especially healthy and smart, cloning could help preserve those good genes. This technology could also contribute positively to the overall development of biotechnology. Cloning allows people to maintain a connection with a beloved pet that has passed away.
+
+Even if the appearance is the same, the personality and behavior can be different—so it's not really the same pet. The cloning process often causes suffering or death for many animals, which raises ethical concerns. With so many abandoned animals already, it's questionable whether creating new lives this way is the right thing to do. Since cloning is so expensive, it feels unfair that only the wealthy can afford it."""
             
             # Update token usage (approximate since we're not actually calling the API)
             st.session_state.token_usage["prompt_tokens"] += len(prompt.split())
@@ -214,14 +213,18 @@ But even if the appearance is the same, the personality and behavior can be diff
             if chunk.choices and chunk.choices[0].delta.content:
                 content_chunk = chunk.choices[0].delta.content
                 full_response += content_chunk
+                
+                # 표시할 때는 정제된 응답을 보여줌
+                clean_display = clean_response(full_response)
                 placeholder.markdown(
-                    f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{full_response}▌</div>",
+                    f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{clean_display}▌</div>",
                     unsafe_allow_html=True
                 )
         
-        # Update the placeholder with the final response (no cursor)
+        # 최종 응답 업데이트
+        clean_full_response = clean_response(full_response)
         placeholder.markdown(
-            f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{full_response}</div>",
+            f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{clean_full_response}</div>",
             unsafe_allow_html=True
         )
         
@@ -233,11 +236,31 @@ But even if the appearance is the same, the personality and behavior can be diff
         # Increment turn counter
         st.session_state.current_turn += 1
         
-        return full_response
+        return clean_full_response
         
     except Exception as e:
         st.error(f"Error generating response: {str(e)}")
         return "I'm sorry, I encountered an error while processing your request."
+
+# 응답 정제 함수 추가
+def clean_response(response):
+    """Clean the response to remove numbering, bullets, and markdown formatting"""
+    # 번호 제거 (1., 2., 등)
+    response = response.replace("\n\n", "\n")  # 빈 줄 제거
+    response = response.replace("\n1.", "\n").replace("\n2.", "\n").replace("\n3.", "\n").replace("\n4.", "\n")
+    response = response.replace("1. ", "").replace("2. ", "").replace("3. ", "").replace("4. ", "")
+    
+    # 글머리 기호 제거
+    response = response.replace("\n- ", "\n").replace("- ", "")
+    
+    # 강조 표시 제거
+    response = response.replace("**", "").replace("__", "")
+    
+    # "Supporting", "Opposing" 관련 문구 제거
+    response = response.replace("Supporting ", "").replace("Opposing ", "")
+    response = response.replace("Supporting: ", "").replace("Opposing: ", "")
+    
+    return response
 
 # Sidebar for settings
 with st.sidebar:
@@ -355,7 +378,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
     prompt = st.chat_input("Type your message here...")
     if prompt:
-        # Add user message
+        st.rerun() message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         # Generate and add bot response
