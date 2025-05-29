@@ -151,8 +151,8 @@ st.markdown("""
 
 def get_openai_client():
     """Create and return an OpenAI client configured with environment variables"""
-    token = st.secrets["GITHUB_TOKEN"]
-    endpoint = os.getenv("GITHUB_ENDPOINT", "https://models.github.ai/inference")
+    token = st.secrets["OPENAI_API_KEY"]
+    endpoint = st.secrets["OPENAI_API_BASE"]
     
     if not token:
         st.error("GitHub token not found in environment variables. Please check your .env file.")
@@ -169,7 +169,7 @@ def generate_response(prompt):
         return "We've reached the maximum number of turns for this conversation. Please reset the conversation to continue."
     
     client = get_openai_client()
-    model_name = os.getenv("GITHUB_MODEL", "openai/gpt-4o")
+    model_name = st.secrets["OPENAI_API_MODEL"]
     
     # Create message history for the API call
     messages = [{"role": "system", "content": st.session_state.system_message}]
