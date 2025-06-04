@@ -207,8 +207,9 @@ def generate_response(prompt):
     try:
         # If this is the first turn, we want to use the predefined response
         if st.session_state.current_turn == 0:
-            predefined_response = """For those who see pets as family, it may help ease the pain of loss. If the pet was especially healthy and smart, cloning could help preserve those good genes. And this technology could also contribute positively to the overall development of biotechnology.
-But even if the appearance is the same, the personality and behavior can be different—so it's not really the same pet. The cloning process often causes suffering or death for many animals, which raises ethical concerns. With so many abandoned animals already, it's questionable whether creating new lives this way is the right thing to do. And since cloning is so expensive, it feels unfair that only the wealthy can afford it."""
+            predefined_response = """Cloning a deceased pet involves using biotechnology to create a new animal that is genetically identical to the original. For many people, pets are like family, so the idea of meeting them again in any form can be deeply comforting. With today's advanced technology, cloning has become a realistic option. Some also believe it's worth preserving the genes of special animals—like service dogs or police dogs—through cloning.
+
+However, cloning from a deceased pet involves complex steps—DNA must be extracted from preserved tissue, then an embryo is formed and implanted into a surrogate. Even if the cloned pet looks the same and shares the same genes, it won't have the same memories or personality, and the sense of loss may still remain. There are many abandoned animals waiting to be adopted, and providing care for them may be a more meaningful choice than cloning."""
             
             # Update token usage (approximate since we're not actually calling the API)
             st.session_state.token_usage["prompt_tokens"] += len(prompt.split())
@@ -359,19 +360,35 @@ with st.sidebar:
 if "show_survey" not in st.session_state:
     st.session_state.show_survey = False
 
-# 채팅이 끝났으면 설문조사 페이지로 이동
+# Next 버튼 클릭 여부를 저장하는 상태 변수 추가
+if "next_clicked" not in st.session_state:
+    st.session_state.next_clicked = False
+
+# 채팅이 끝났을 때 Next 버튼 표시 여부를 위한 상태 변수
+if "show_next_button" not in st.session_state:
+    st.session_state.show_next_button = False
+
+# 채팅이 끝났으면 Next 버튼 표시
 if (
     st.session_state.conversation_started
     and st.session_state.current_turn >= st.session_state.max_turns
     and not st.session_state.show_survey
+    and not st.session_state.next_clicked
 ):
-    st.session_state.show_survey = True
+    st.session_state.show_next_button = True
 
+# Next 버튼이 클릭되면 설문조사 페이지로 이동
+def on_next_click():
+    st.session_state.next_clicked = True
+    st.session_state.show_survey = True
+    st.session_state.show_next_button = False
+
+# 설문조사 또는 채팅 UI 표시
 if st.session_state.show_survey:
     st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
     st.markdown("**Do you want to talk more with this chatbot?**")
     
-    # 슬라이더 UI 개선 - 숫자 중복 제거
+    # 슬라이더 UI 개선
     col1, col2, col3 = st.columns([1, 10, 1])
     
     with col1:
@@ -390,15 +407,14 @@ if st.session_state.show_survey:
         else:
             st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
 else:
-    # 기존 채팅 UI 코드 (아래는 기존 코드 일부 예시)
-    # Main content area
+    # 기존 채팅 UI 코드
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
     # Display the introductory message with reduced width
     st.markdown(
-        "<div class='system-message'>You are about to have a conversation with the chatbot on the topic of 'Pet Cloning.' "
-        "The conversation will include four turns, including this fixed first message, and will take approximately five minutes. "
-        "As you talk with the chatbot, try to organize your thoughts on the topic of animal cloning.</div>",
+        "<div class='system-message'>You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". "
+        "Click the button with the question to begin the first turn. "
+        "After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Greeni will respond to your messages.</div>",
         unsafe_allow_html=True
     )
 
@@ -414,7 +430,6 @@ else:
         if not st.session_state.conversation_started and st.button(
             "Greeni, explain about 'Pet cloning'", 
             key="conversation_starter",
-            # type="primary"
         ):
             # Start tracking time
             st.session_state.interaction_start = datetime.datetime.now()
@@ -445,6 +460,10 @@ else:
                 f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
                 unsafe_allow_html=True
             )
+
+    # Next 버튼 표시 (대화가 모두 끝났을 때)
+    if st.session_state.show_next_button:
+        st.button("Next →", on_click=on_next_click, type="primary")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
