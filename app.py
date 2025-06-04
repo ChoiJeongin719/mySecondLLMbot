@@ -304,73 +304,93 @@ with st.sidebar:
         st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         st.success("Conversation reset!")
 
-# Main content area
-st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+# 설문조사 페이지 표시 여부를 위한 상태 변수 추가
+if "show_survey" not in st.session_state:
+    st.session_state.show_survey = False
 
-# Display the introductory message with reduced width
-st.markdown(
-    "<div class='system-message'>You are about to have a conversation with the chatbot on the topic of 'Pet Cloning.' "
-    "The conversation will include four turns, including this fixed first message, and will take approximately five minutes. "
-    "As you talk with the chatbot, try to organize your thoughts on the topic of animal cloning.</div>",
-    unsafe_allow_html=True
-)
+# 채팅이 끝났으면 설문조사 페이지로 이동
+if (
+    st.session_state.conversation_started
+    and st.session_state.current_turn >= st.session_state.max_turns
+    and not st.session_state.show_survey
+):
+    st.session_state.show_survey = True
 
-# Display remaining turns
-st.markdown(
-    f"<div class='remaining-turns'>Remaining turns: {st.session_state.max_turns - st.session_state.current_turn}</div>",
-    unsafe_allow_html=True
-)
+if st.session_state.show_survey:
+    st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
+    st.markdown("**Do you want to talk more with this chatbot?**")
+    score = st.slider("Select your agreement level", 1, 9, 5, format="%d (1=Disagree, 9=Agree)")
+    if st.button("Submit Survey"):
+        st.success(f"Thank you for your feedback! Your score: {score}")
+else:
+    # 기존 채팅 UI 코드 (아래는 기존 코드 일부 예시)
+    # Main content area
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
-# Conversation starter button
-col1, col2 = st.columns([3, 1])
-with col2:
-    if not st.session_state.conversation_started and st.button(
-        "Greeni, explain about 'Pet cloning'", 
-        key="conversation_starter",
-        # type="primary"
-    ):
-        # Start tracking time
-        st.session_state.interaction_start = datetime.datetime.now()
-        
-        # Set conversation as started
-        st.session_state.conversation_started = True
-        
-        # Add user message
-        prompt = "Greeni, explain about 'Pet cloning'"
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Generate and add bot response
-        response = generate_response(prompt)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        # Force a rerun to show the messages
-        st.rerun()
+    # Display the introductory message with reduced width
+    st.markdown(
+        "<div class='system-message'>You are about to have a conversation with the chatbot on the topic of 'Pet Cloning.' "
+        "The conversation will include four turns, including this fixed first message, and will take approximately five minutes. "
+        "As you talk with the chatbot, try to organize your thoughts on the topic of animal cloning.</div>",
+        unsafe_allow_html=True
+    )
 
-# Display chat messages
-for message in st.session_state.messages:
-    if message["role"] == "user":
-        st.markdown(
-            f"<div class='user-bubble'>{message['content']}</div>",
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
-            unsafe_allow_html=True
-        )
+    # Display remaining turns
+    st.markdown(
+        f"<div class='remaining-turns'>Remaining turns: {st.session_state.max_turns - st.session_state.current_turn}</div>",
+        unsafe_allow_html=True
+    )
 
-st.markdown("</div>", unsafe_allow_html=True)
+    # Conversation starter button
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if not st.session_state.conversation_started and st.button(
+            "Greeni, explain about 'Pet cloning'", 
+            key="conversation_starter",
+            # type="primary"
+        ):
+            # Start tracking time
+            st.session_state.interaction_start = datetime.datetime.now()
+            
+            # Set conversation as started
+            st.session_state.conversation_started = True
+            
+            # Add user message
+            prompt = "Greeni, explain about 'Pet cloning'"
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            
+            # Generate and add bot response
+            response = generate_response(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            
+            # Force a rerun to show the messages
+            st.rerun()
 
-# Chat input (only show if conversation has started and max turns not reached)
-if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
-    prompt = st.chat_input("Type your message here...")
-    if prompt:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Generate and add bot response
-        response = generate_response(prompt)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        # Force a rerun to show the messages
-        st.rerun()
+    # Display chat messages
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            st.markdown(
+                f"<div class='user-bubble'>{message['content']}</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
+                unsafe_allow_html=True
+            )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Chat input (only show if conversation has started and max turns not reached)
+    if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
+        prompt = st.chat_input("Type your message here...")
+        if prompt:
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            
+            # Generate and add bot response
+            response = generate_response(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            
+            # Force a rerun to show the messages
+            st.rerun()
