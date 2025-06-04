@@ -370,7 +370,19 @@ if (
 if st.session_state.show_survey:
     st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
     st.markdown("**Do you want to talk more with this chatbot?**")
-    score = st.slider("Select your agreement level", 1, 9, 5, format="%d (1=Disagree, 9=Agree)")
+    
+    # 슬라이더 UI 개선 - 숫자 중복 제거
+    col1, col2, col3 = st.columns([1, 10, 1])
+    
+    with col1:
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Disagree)</div>", unsafe_allow_html=True)
+        
+    with col2:
+        score = st.slider("", 1, 9, 5, label_visibility="collapsed")
+        
+    with col3:
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Agree)</div>", unsafe_allow_html=True)
+    
     if st.button("Submit Survey"):
         # Supabase에 데이터 저장
         if save_to_supabase(score):
