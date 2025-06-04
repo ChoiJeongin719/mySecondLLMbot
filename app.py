@@ -3,7 +3,17 @@ import os
 import time
 from openai import OpenAI
 import datetime
+import uuid
+from supabase import create_client, Client  # 추가
 
+# 사용자 ID 생성 (세션 시작시 한번만)
+if "user_id" not in st.session_state:
+    st.session_state.user_id = str(uuid.uuid4())
+
+# Supabase 클라이언트 초기화
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(supabase_url, supabase_key)
 
 # Page configuration
 st.set_page_config(
@@ -252,6 +262,42 @@ But even if the appearance is the same, the personality and behavior can be diff
         st.error(f"Error generating response: {str(e)}")
         return "I'm sorry, I encountered an error while processing your request."
 
+def save_to_supabase(score=None):
+    """Supabase에 데이터 저장"""
+    try:
+        # 시간 정보 계산
+        if st.session_state.interaction_start:
+            end_time = datetime.datetime.now()
+            elapsed = end_time - st.session_state.interaction_start
+            duration_seconds = int(elapsed.total_seconds())
+            interaction_time = f"{duration_seconds // 60} min {duration_seconds % 60} sec"
+        else:
+            interaction_time = None
+        
+        # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
+        data = {
+            # timestamp는 기본값 now()를 사용
+            "user_id": st.session_state.user_id,
+            "interaction_time": interaction_time,
+            "total_tokens": st.session_state.token_usage["total_tokens"],
+            "prompt_tokens": st.session_state.token_usage["prompt_tokens"],
+            "completion_tokens": st.session_state.token_usage["completion_tokens"],
+            "score": score,
+            "messages": st.session_state.messages  # 대화 내용 저장
+        }
+        
+        # Supabase에 데이터 저장
+        result = supabase.table("chatbot_logs").insert(data).execute()
+        
+        # 저장 성공 여부 확인
+        if result.data:
+            return True
+        return False
+    
+    except Exception as e:
+        st.error(f"데이터 저장 중 오류 발생: {str(e)}")
+        return False
+
 # Sidebar for settings
 with st.sidebar:
     st.header("Settings")
@@ -297,6 +343,11 @@ with st.sidebar:
     # Reset conversation button
     st.markdown("---")
     if st.button("Reset Conversation"):
+        # 기존 대화가 있으면 저장
+        if st.session_state.conversation_started and st.session_state.messages:
+            save_to_supabase(None)  # score는 None으로 저장
+        
+        # 세션 상태 초기화
         st.session_state.messages = []
         st.session_state.conversation_started = False
         st.session_state.current_turn = 0
@@ -321,7 +372,11 @@ if st.session_state.show_survey:
     st.markdown("**Do you want to talk more with this chatbot?**")
     score = st.slider("Select your agreement level", 1, 9, 5, format="%d (1=Disagree, 9=Agree)")
     if st.button("Submit Survey"):
-        st.success(f"Thank you for your feedback! Your score: {score}")
+        # Supabase에 데이터 저장
+        if save_to_supabase(score):
+            st.success(f"Thank you for your feedback! Your score: {score}")
+        else:
+            st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
 else:
     # 기존 채팅 UI 코드 (아래는 기존 코드 일부 예시)
     # Main content area
