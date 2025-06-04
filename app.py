@@ -51,7 +51,7 @@ st.markdown("""
     }
     
     .user-bubble {
-        background-color: #e6f2ff;
+        background-color: #e3f0fd;  /* 파란색 계열로 변경: 기존 #e6f2ff -> #e3f0fd */
         padding: 12px;
         border-radius: 18px 18px 0 18px;
         margin-bottom: 16px;
@@ -88,6 +88,19 @@ st.markdown("""
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
     
+    /* 말풍선 꼬리 추가 */
+    .bot-bubble::after {
+        content: "";
+        position: absolute;
+        left: -10px;
+        top: 15px;
+        width: 0;
+        height: 0;
+        border-top: 10px solid transparent;
+        border-bottom: 10px solid transparent;
+        border-right: 10px solid #f1f1f1;
+    }
+    
     .bot-name {
         font-size: 0.8em;
         color: #4CAF50;  /* Green color for Greeni */
@@ -101,7 +114,7 @@ st.markdown("""
         padding: 15px;
         border-radius: 5px;
         margin-bottom: 20px;
-        border-left: 4px solid #4CAF50;
+        /* border-left: 4px solid #4CAF50;  <-- 이 줄을 삭제 또는 주석 처리 */
         max-width: 700px;
         margin-left: auto;
         margin-right: auto;
@@ -117,7 +130,7 @@ st.markdown("""
         display: block;
         margin-left: auto;
         margin-right: 0;
-        background-color: #4CAF50;
+        background-color: #2196F3;  /* 파란색으로 변경: 기존 #4CAF50 -> #2196F3 */
         color: white;
         border: none;
         border-radius: 20px;
@@ -292,9 +305,6 @@ with st.sidebar:
         st.success("Conversation reset!")
 
 # Main content area
-# Add page title
-st.markdown("<h1 class='page-title'>Debate</h1>", unsafe_allow_html=True)
-
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
 # Display the introductory message with reduced width
@@ -317,7 +327,7 @@ with col2:
     if not st.session_state.conversation_started and st.button(
         "Greeni, explain about 'Pet cloning'", 
         key="conversation_starter",
-        type="primary"
+        # type="primary"
     ):
         # Start tracking time
         st.session_state.interaction_start = datetime.datetime.now()
