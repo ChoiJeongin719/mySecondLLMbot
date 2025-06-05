@@ -2,9 +2,21 @@ import streamlit as st
 import os
 import time
 from openai import OpenAI
-import datetime
 import uuid
 from supabase import create_client, Client  # 추가
+import logging
+import datetime
+
+# Set up logger to log to streamlit.log file
+logger = logging.getLogger("app_logger")
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler("streamlit.log")
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+if not logger.hasHandlers():
+    logger.addHandler(file_handler)
+logger.info("Starting the Streamlit app...")
 
 # 사용자 ID 생성 (세션 시작시 한번만)
 if "user_id" not in st.session_state:
@@ -169,7 +181,7 @@ st.markdown("""
         margin-bottom: 20px;
         color: #333;
     }
-</style>
+</style>리
 """, unsafe_allow_html=True)
 
 def get_openai_client():
@@ -265,11 +277,14 @@ However, cloning from a deceased pet involves complex steps—DNA must be extrac
 
 def save_to_supabase(score=None):
     """Supabase에 데이터 저장"""
+    logger.info("save_to_supabase called")
     try:
         # 시간 정보 계산
         if st.session_state.interaction_start:
+            start_time = st.session_state.interaction_start
+            logger.info(f"Interaction started at: {start_time}")
             end_time = datetime.datetime.now()
-            elapsed = end_time - st.session_state.interaction_start
+            elapsed = end_time - start_time
             duration_seconds = int(elapsed.total_seconds())
             interaction_time = f"{duration_seconds // 60} min {duration_seconds % 60} sec"
         else:
@@ -279,7 +294,9 @@ def save_to_supabase(score=None):
         data = {
             # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
-            "interaction_time": interaction_time,
+            "started_at": start_time.isoformat() if start_time else None,  # Convert to ISO format string
+            "finished_at": end_time.isoformat() if 'end_time' in locals() else None,  # Convert to ISO format string
+            "interaction_time": duration_seconds if 'duration_seconds' in locals() else None,
             "total_tokens": st.session_state.token_usage["total_tokens"],
             "prompt_tokens": st.session_state.token_usage["prompt_tokens"],
             "completion_tokens": st.session_state.token_usage["completion_tokens"],
@@ -289,13 +306,19 @@ def save_to_supabase(score=None):
         
         # Supabase에 데이터 저장
         result = supabase.table("chatbot_logs").insert(data).execute()
+        logger.info(f"Data saved to Supabase: {data}")
         
         # 저장 성공 여부 확인
         if result.data:
+            logger.info("Data successfully saved to Supabase.")
             return True
-        return False
+        else:
+            logger.error("Failed to save data to Supabase.")
+            st.error("데이터 저장에 실패했습니다. 나중에 다시 시도해주세요.")
+            return False
     
     except Exception as e:
+        logger.error(f"Error saving data to Supabase: {str(e)}")
         st.error(f"데이터 저장 중 오류 발생: {str(e)}")
         return False
 
