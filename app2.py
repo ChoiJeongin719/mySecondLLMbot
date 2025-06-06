@@ -243,100 +243,86 @@ def get_openai_client():
         api_key=token,
     )
 
+# 챗봇 응답 생성 함수 수정
 def generate_bot_responses(prompt):
-    """Generate responses from both chatbots"""
     if st.session_state.current_turn >= st.session_state.max_turns:
         return {
             "purpli": "We've reached the maximum number of turns for this conversation. Please reset the conversation to continue.",
             "yellowy": "We've reached the maximum number of turns for this conversation. Please reset the conversation to continue."
         }
-    
+
     client = get_openai_client()
     model_name = st.secrets["OPENAI_API_MODEL"]
-    
-    # First turn uses predefined responses
-    if st.session_state.current_turn == 0 and prompt.lower() == "explain about 'pet cloning'":
-        purpli_response = """Cloning a deceased pet involves using biotechnology to create a new animal that is genetically identical to the original. For many people, pets are like family, so the idea of meeting them again in any form can be deeply comforting. With today's advanced technology, cloning has become a realistic option. Some also believe it's worth preserving the genes of special animals—like service dogs or police dogs—through cloning."""
-        
-        yellowy_response = """Cloning from a deceased pet involves complex steps—DNA must be extracted from preserved tissue, then an embryo is formed and implanted into a surrogate. Even if the cloned pet looks the same and shares the same genes, it won't have the same memories or personality, and the sense of loss may still remain. There are many abandoned animals waiting to be adopted, and providing care for them may be a more meaningful choice than cloning."""
-        
-        # Update token usage (approximate)
-        st.session_state.token_usage["prompt_tokens"] += len(prompt.split())
-        st.session_state.token_usage["completion_tokens"] += len(purpli_response.split()) + len(yellowy_response.split())
-        st.session_state.token_usage["total_tokens"] += len(prompt.split()) + len(purpli_response.split()) + len(yellowy_response.split())
-        
-        # Increment turn counter
+
+    # 첫 턴 고정 응답
+    if st.session_state.current_turn == 0 and "pet cloning" in prompt.lower():
+        purpli_response = (
+            "Cloning a deceased pet involves using biotechnology to create a new animal that is genetically identical to the original. "
+            "For many people, pets are like family, so the idea of meeting them again in any form can be deeply comforting. "
+            "With today's advanced technology, cloning has become a realistic option. "
+            "Some also believe it's worth preserving the genes of special animals—like service dogs or police dogs—through cloning."
+        )
+        yellowy_response = (
+            "Cloning from a deceased pet involves complex steps—DNA must be extracted from preserved tissue, then an embryo is formed and implanted into a surrogate. "
+            "Even if the cloned pet looks the same and shares the same genes, it won't have the same memories or personality, and the sense of loss may still remain. "
+            "There are many abandoned animals waiting to be adopted, and providing care for them may be a more meaningful choice than cloning."
+        )
         st.session_state.current_turn += 1
-        
-        return {
-            "purpli": purpli_response,
-            "yellowy": yellowy_response
-        }
-    
-    # For subsequent turns, generate responses using API
+        return {"purpli": purpli_response, "yellowy": yellowy_response}
+
     try:
-        # Generate Purpli's response (always supporting)
+        # Purpli
         purpli_messages = [{"role": "system", "content": st.session_state.purpli_system_message}]
         for msg in st.session_state.messages:
             if msg["role"] == "user":
                 purpli_messages.append({"role": "user", "content": msg["content"]})
             elif msg["role"] == "purpli":
                 purpli_messages.append({"role": "assistant", "content": msg["content"]})
-        
         purpli_messages.append({"role": "user", "content": prompt})
-        
-        purpli_response = client.chat.completions.create(
+
+        purpli_response_obj = client.chat.completions.create(
             model=model_name,
             messages=purpli_messages,
             temperature=0.7,
-            max_tokens=200
+            max_tokens=200,
         )
-        
-        purpli_content = purpli_response.choices[0].message.content
-        
-        # Generate Yellowy's response (always opposing)
+        purpli_content = (
+            purpli_response_obj.choices[0].message.content
+            if purpli_response_obj and purpli_response_obj.choices and purpli_response_obj.choices[0].message and purpli_response_obj.choices[0].message.content
+            else "Sorry, Purpli couldn't answer due to a technical issue."
+        )
+
+        # Yellowy
         yellowy_messages = [{"role": "system", "content": st.session_state.yellowy_system_message}]
         for msg in st.session_state.messages:
             if msg["role"] == "user":
                 yellowy_messages.append({"role": "user", "content": msg["content"]})
             elif msg["role"] == "yellowy":
                 yellowy_messages.append({"role": "assistant", "content": msg["content"]})
-        
         yellowy_messages.append({"role": "user", "content": prompt})
-        
-        yellowy_response = client.chat.completions.create(
+
+        yellowy_response_obj = client.chat.completions.create(
             model=model_name,
             messages=yellowy_messages,
             temperature=0.7,
-            max_tokens=200
+            max_tokens=200,
         )
-        
-        yellowy_content = yellowy_response.choices[0].message.content
-        
-        # Update token usage (approximate)
-        prompt_tokens = len(prompt.split())
-        completion_tokens = len(purpli_content.split()) + len(yellowy_content.split())
-        
-        st.session_state.token_usage["prompt_tokens"] += prompt_tokens
-        st.session_state.token_usage["completion_tokens"] += completion_tokens
-        st.session_state.token_usage["total_tokens"] += prompt_tokens + completion_tokens
-        
-        # Increment turn counter
+        yellowy_content = (
+            yellowy_response_obj.choices[0].message.content
+            if yellowy_response_obj and yellowy_response_obj.choices and yellowy_response_obj.choices[0].message and yellowy_response_obj.choices[0].message.content
+            else "Sorry, Yellowy couldn't answer due to a technical issue."
+        )
+
         st.session_state.current_turn += 1
-        
-        return {
-            "purpli": purpli_content,
-            "yellowy": yellowy_content
-        }
-        
+        return {"purpli": purpli_content, "yellowy": yellowy_content}
+
     except Exception as e:
-        st.error(f"Error generating responses: {str(e)}")
-        # 자세한 오류 메시지 출력
+        st.error(f"Error: {e}")
         import traceback
-        st.error(f"상세 오류: {traceback.format_exc()}")
+        st.error(traceback.format_exc())
         return {
-            "purpli": "I'm sorry, I encountered an error while processing your request.",
-            "yellowy": "I'm sorry, I encountered an error while processing your request."
+            "purpli": "Sorry, Purpli couldn't answer due to a technical issue.",
+            "yellowy": "Sorry, Yellowy couldn't answer due to a technical issue."
         }
 
 # 설문조사 페이지 표시 여부를 위한 상태 변수 추가
