@@ -243,7 +243,7 @@ def get_openai_client():
         api_key=token,
     )
 
-# 챗봇 응답 생성 함수 수정
+# 챗봇 응답 생성 함수 (메모리/히스토리 없이)
 def generate_bot_responses(prompt):
     if st.session_state.current_turn >= st.session_state.max_turns:
         return {
@@ -271,15 +271,11 @@ def generate_bot_responses(prompt):
         return {"purpli": purpli_response, "yellowy": yellowy_response}
 
     try:
-        # Purpli
-        purpli_messages = [{"role": "system", "content": st.session_state.purpli_system_message}]
-        for msg in st.session_state.messages:
-            if msg["role"] == "user":
-                purpli_messages.append({"role": "user", "content": msg["content"]})
-            elif msg["role"] == "purpli":
-                purpli_messages.append({"role": "assistant", "content": msg["content"]})
-        purpli_messages.append({"role": "user", "content": prompt})
-
+        # Purpli (히스토리 없이)
+        purpli_messages = [
+            {"role": "system", "content": st.session_state.purpli_system_message},
+            {"role": "user", "content": prompt}
+        ]
         purpli_response_obj = client.chat.completions.create(
             model=model_name,
             messages=purpli_messages,
@@ -292,15 +288,11 @@ def generate_bot_responses(prompt):
             else "Sorry, Purpli couldn't answer due to a technical issue."
         )
 
-        # Yellowy
-        yellowy_messages = [{"role": "system", "content": st.session_state.yellowy_system_message}]
-        for msg in st.session_state.messages:
-            if msg["role"] == "user":
-                yellowy_messages.append({"role": "user", "content": msg["content"]})
-            elif msg["role"] == "yellowy":
-                yellowy_messages.append({"role": "assistant", "content": msg["content"]})
-        yellowy_messages.append({"role": "user", "content": prompt})
-
+        # Yellowy (히스토리 없이)
+        yellowy_messages = [
+            {"role": "system", "content": st.session_state.yellowy_system_message},
+            {"role": "user", "content": prompt}
+        ]
         yellowy_response_obj = client.chat.completions.create(
             model=model_name,
             messages=yellowy_messages,
