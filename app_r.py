@@ -303,7 +303,7 @@ def save_to_supabase(score=None):
         }
         
         # Supabase에 데이터 저장
-        result = supabase.table("LLM1").insert(data).execute()
+        result = supabase.table("LLM1_R").insert(data).execute()
         
         # 저장 성공 여부 확인
         if result.data:
