@@ -16,7 +16,8 @@ load_dotenv()
 st.set_page_config(
     page_title="Debate Chatbot",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"  # 사이드바 기본 숨김 상태로 설정
 )
 
 # Initialize app state (to switch between chat and survey)
@@ -64,9 +65,9 @@ if "conversation_started" not in st.session_state:
 if "current_turn" not in st.session_state:
     st.session_state.current_turn = 0
 
-# 턴 수 설정 변수
+# 턴 수 설정 변수 (약 62줄 근처)
 if "max_turns" not in st.session_state:
-    st.session_state.max_turns = 4  # 기본값
+    st.session_state.max_turns = 4  # 고정값 4로 설정
 
 # Survey response
 if "survey_response" not in st.session_state:
@@ -288,7 +289,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 68%;
+        max-width: 50%;  
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -315,7 +316,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 68%;
+        max-width: 50%;  
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -343,7 +344,7 @@ st.markdown("""
         border-radius: 18px 18px 0 18px;
         margin-bottom: 16px;
         text-align: left;
-        max-width: 60%;
+        max-width: 50%;  /* 60%에서 50%로 줄임 */
         margin-left: auto;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
@@ -353,7 +354,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px;
         margin-bottom: 16px;
-        max-width: 70%;
+        max-width: 60%;  /* 70%에서 60%로 줄임 */
         margin-left: auto;
         margin-right: auto;
         text-align: center;
@@ -429,6 +430,23 @@ st.markdown("""
         justify-content: space-between;
         margin-top: 5px;
         color: #666;
+    }
+    
+    /* 사이드바 완전히 숨기기 */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    
+    /* 메인 콘텐츠 영역 너비 조정 */
+    .main .block-container {
+        max-width: 100%;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    
+    /* 채팅 입력창 위치 조정 (사이드바 없을 때) */
+    .stChatFloatingInputContainer {
+        width: calc(100% - 4rem) !important; /* 사이드바 없을 때 너비 조정 */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -565,113 +583,7 @@ def show_chat_page():
     # 상단에 참가자 ID 표시 추가
     st.markdown(f"<div style='text-align: right; font-size: 0.8em; color: #666;'>Participant ID: {st.session_state.participant_id}</div>", unsafe_allow_html=True)
     
-    # Sidebar settings
-    with st.sidebar:
-        st.subheader("Settings")
-        
-        # 대화 턴 수 설정 슬라이더 추가
-        st.session_state.max_turns = st.slider(
-            "Number of conversation turns", 
-            min_value=1, 
-            max_value=10, 
-            value=st.session_state.max_turns,
-            step=1
-        )
-        
-        st.markdown(f"**Current turn: {st.session_state.current_turn}/{st.session_state.max_turns}**")
-        
-        # Display time statistics
-        with st.expander("Usage Time Statistics", expanded=False):
-            # Calculate current session
-            current_session_duration = st.session_state.last_interaction_time - st.session_state.session_start_time
-            total_time = st.session_state.total_session_duration + current_session_duration
-            
-            # Format time (hours:minutes:seconds)
-            def format_timedelta(td):
-                total_seconds = int(td.total_seconds())
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                seconds = total_seconds % 60
-                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            
-            st.write("### Usage Time")
-            st.write(f"Current session: {format_timedelta(current_session_duration)}")
-            st.write(f"Total usage time: {format_timedelta(total_time)}")
-            st.write(f"Total interactions: {st.session_state.interaction_count}")
-            st.write(f"First usage time: {st.session_state.session_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            st.write(f"Last usage time: {st.session_state.last_interaction_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Edit pro system message
-        st.text_area(
-            "Pro Chatbot Settings", 
-            value=st.session_state.system_message_pro,
-            key="system_message_pro_input",
-            height=150
-        )
-        
-        # Edit con system message
-        st.text_area(
-            "Con Chatbot Settings", 
-            value=st.session_state.system_message_con,
-            key="system_message_con_input",
-            height=150
-        )
-        
-        if st.button("Update System Messages"):
-            st.session_state.system_message_pro = st.session_state.system_message_pro_input
-            st.session_state.system_message_con = st.session_state.system_message_con_input
-            st.success("System messages have been updated!")
-        
-        # Other sidebar elements
-        st.markdown("---")
-        
-        # View chat history
-        with st.expander("View Chat History"):
-            st.json(st.session_state.messages)
-        
-        # View usage statistics
-        with st.expander("View Usage Statistics"):
-            if st.session_state.usage_stats:
-                for i, usage in enumerate(st.session_state.usage_stats):
-                    st.write(f"Message {i+1}:")
-                    st.write(f"- Prompt tokens: {usage['prompt_tokens']}")
-                    st.write(f"- Completion tokens: {usage['completion_tokens']}")
-                    st.write(f"- Total tokens: {usage['total_tokens']}")
-                    st.divider()
-                
-                # Calculate total usage
-                total_prompt = sum(u["prompt_tokens"] for u in st.session_state.usage_stats)
-                total_completion = sum(u["completion_tokens"] for u in st.session_state.usage_stats)
-                total = sum(u["total_tokens"] for u in st.session_state.usage_stats)
-                
-                st.write("### Total Usage")
-                st.write(f"- Total prompt tokens: {total_prompt}")
-                st.write(f"- Total completion tokens: {total_completion}")
-                st.write(f"- Total tokens: {total}")
-            else:
-                st.write("No usage data available yet.")
-        
-        # Reset chat button
-        if st.button("Reset Chat"):
-            st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
-            st.session_state.usage_stats = []
-            st.session_state.conversation_started = False
-            st.session_state.current_turn = 0
-            
-            # Reset time variables
-            now = datetime.datetime.now()
-            st.session_state.session_start_time = now
-            st.session_state.last_interaction_time = now
-            st.session_state.total_session_duration = datetime.timedelta(0)
-            st.session_state.interaction_count = 0
-            
-            st.success("Chat history has been reset!")
-        
-        # Process display toggle
-        st.markdown("---")
-        st.session_state.show_process = st.checkbox("Show model processing", value=st.session_state.show_process)
-
-    # Main chat area
+    # 메인 채팅 영역
     chat_container = st.container()
     with chat_container:
         st.markdown('<div class="main-content">', unsafe_allow_html=True)
@@ -697,7 +609,7 @@ def show_chat_page():
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if not st.session_state.conversation_started and st.button(
-                            "Explain about 'Pet Cloning'",
+                            "Purpli, Yellowy, can you tell me about cloning of a deceased pet?",  # 이 부분 변경
                             key="conversation_starter"
                         ):
                             # 상호작용 시작 시간 기록
@@ -705,7 +617,7 @@ def show_chat_page():
                             
                             st.session_state.conversation_started = True
                             st.session_state.current_turn = 1
-                            user_prompt = "Explain about 'Pet cloning'"
+                            user_prompt = "Purpli, Yellowy, can you tell me about cloning of a deceased pet?"  # 이 부분도 변경
                             st.session_state.messages.append({"role": "user", "content": user_prompt})
                             
                             # 고정된 첫 응답

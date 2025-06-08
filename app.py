@@ -19,7 +19,8 @@ supabase: Client = create_client(supabase_url, supabase_key)
 st.set_page_config(
     page_title="Debate with Greeni: Pet Cloning",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"  # 사이드바 기본 숨김 상태로 설정
 )
 
 # Initialize session state variables
@@ -75,7 +76,7 @@ st.markdown("""
         border-radius: 18px 18px 0 18px;
         margin-bottom: 16px;
         text-align: left;
-        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        max-width: 50%;  /* 기존 55%에서 50%로 변경 */
         margin-left: auto;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
@@ -85,7 +86,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 55%;  /* 기존 80%에서 55%로 변경 */
+        max-width: 50%;  /* 기존 55%에서 50%로 변경 */
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -134,7 +135,7 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 20px;
         /* border-left: 4px solid #4CAF50;  <-- 이 줄을 삭제 또는 주석 처리 */
-        max-width: 700px;
+        max-width: 60%;  /* 기존 700px에서 60%로 변경 */
         margin-left: auto;
         margin-right: auto;
     }
@@ -177,6 +178,23 @@ st.markdown("""
         text-align: center;
         margin-bottom: 20px;
         color: #333;
+    }
+
+    /* 사이드바 완전히 숨기기 */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+
+    /* 메인 콘텐츠 영역 너비 조정 */
+    .main .block-container {
+        max-width: 100%;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+
+    /* 채팅 입력창 위치 조정 (사이드바 없을 때) */
+    .stChatFloatingInputContainer {
+        width: calc(100% - 4rem) !important; /* 사이드바 없을 때 너비 조정 */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -496,7 +514,7 @@ def show_chat_page():
         col1, col2 = st.columns([3, 1])
         with col2:
             if not st.session_state.conversation_started and st.button(
-                "Greeni, explain about 'Pet cloning'", 
+                "Greeni, can you tell me about cloning of a deceased pet?",  # 버튼 텍스트 변경
                 key="conversation_starter",
             ):
                 # Start tracking time
@@ -506,7 +524,7 @@ def show_chat_page():
                 st.session_state.conversation_started = True
                 
                 # Add user message
-                prompt = "Greeni, explain about 'Pet cloning'"
+                prompt = "Greeni, can you tell me about cloning of a deceased pet?"  # 메시지 내용도 동일하게 변경
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 
                 # Generate and add bot response

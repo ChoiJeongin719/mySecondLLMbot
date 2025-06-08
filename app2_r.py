@@ -18,7 +18,8 @@ load_dotenv()
 st.set_page_config(
     page_title="Debate Chatbot",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"  # 사이드바 기본 숨김 상태로 설정
 )
 
 
@@ -313,7 +314,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 68%;
+        max-width: 50%;  /* 68%에서 50%로 변경 */
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -342,7 +343,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
-        max-width: 68%;
+        max-width: 50%;  /* 68%에서 50%로 변경 */
         position: relative;
         margin-left: 50px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -372,7 +373,7 @@ st.markdown("""
         border-radius: 18px 18px 0 18px;
         margin-bottom: 16px;
         text-align: left;
-        max-width: 60%;
+        max-width: 50%;  /* 60%에서 50%로 변경 */
         margin-left: auto;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
@@ -383,7 +384,7 @@ st.markdown("""
         padding: 12px;
         border-radius: 18px;
         margin-bottom: 16px;
-        max-width: 70%;
+        max-width: 60%;  /* 70%에서 60%로 변경 */
         margin-left: auto;
         margin-right: auto;
         text-align: center;
@@ -463,6 +464,23 @@ st.markdown("""
         justify-content: space-between;
         margin-top: 5px;
         color: #666;
+    }
+   
+    /* 사이드바 완전히 숨기기 */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+
+    /* 메인 콘텐츠 영역 너비 조정 */
+    .main .block-container {
+        max-width: 100%;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+
+    /* 채팅 입력창 위치 조정 (사이드바 없을 때) */
+    .stChatFloatingInputContainer {
+        width: calc(100% - 4rem) !important; /* 사이드바 없을 때 너비 조정 */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -736,15 +754,15 @@ def show_chat_page():
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if not st.session_state.conversation_started and st.button(
-                            "Explain about 'Pet Cloning'",
+                            "Yellowy, Purpli, can you tell me about cloning of a deceased pet?",  # 버튼 텍스트 변경
                             key="conversation_starter"
                         ):
                             # 상호작용 시작 시간 기록
                             st.session_state.interaction_start = datetime.datetime.now()
-                           
+                            
                             st.session_state.conversation_started = True
                             st.session_state.current_turn = 1
-                            user_prompt = "Explain about 'Pet cloning'"
+                            user_prompt = "Yellowy, Purpli, can you tell me about cloning of a deceased pet?"  # 메시지 내용도 동일하게 변경
                             st.session_state.messages.append({"role": "user", "content": user_prompt})
                            
                             # 고정된 첫 응답
