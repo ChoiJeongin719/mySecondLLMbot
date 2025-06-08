@@ -259,7 +259,7 @@ def generate_debate_responses(prompt):
 st.markdown("""
     <style>
     .pro-bubble {
-        background-color: #f1e5ff;
+        background-color: #f5f5f5;  /* 밝은 회색으로 변경 */
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
@@ -274,7 +274,7 @@ st.markdown("""
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background-color: #9C27B0;  /* Purple color */
+        background-color: #9C27B0;  /* 보라색 유지 */
         position: absolute;
         left: -50px;
         top: 0;
@@ -286,7 +286,7 @@ st.markdown("""
     }
 
     .con-bubble {
-        background-color: #fffde7;
+        background-color: #f5f5f5;  /* 동일한 밝은 회색으로 변경 */
         padding: 12px;
         border-radius: 18px 18px 18px 0;
         margin-bottom: 16px;
@@ -301,7 +301,7 @@ st.markdown("""
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background-color: #FFC107;  /* Yellow color */
+        background-color: #FFC107;  /* 노란색 유지 */
         position: absolute;
         left: -50px;
         top: 0;
@@ -350,7 +350,7 @@ st.markdown("""
 
     .pro-name {
         font-size: 0.8em;
-        color: #9C27B0;  /* Purple color */
+        color: #9C27B0;  /* 보라색 유지 */
         font-weight: bold;
         margin-bottom: 4px;
         margin-left: 0px;
@@ -358,7 +358,7 @@ st.markdown("""
 
     .con-name {
         font-size: 0.8em;
-        color: #FFC107;  /* Yellow color */
+        color: #FFC107;  /* 노란색 유지 */
         font-weight: bold;
         margin-bottom: 4px;
         margin-left: 0px;
