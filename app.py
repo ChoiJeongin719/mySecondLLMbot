@@ -53,6 +53,15 @@ if "interaction_start" not in st.session_state:
 if "token_usage" not in st.session_state:
     st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
+# 파일 상단에 앱 상태 관리를 위한 변수 추가 (23-27줄 근처)
+
+# 앱 상태 및 참가자 ID 관리
+if "app_state" not in st.session_state:
+    st.session_state.app_state = "participant_id"  # 'participant_id', 'chat', 'survey', 'complete'
+
+if "participant_id" not in st.session_state:
+    st.session_state.participant_id = ""
+
 # CSS styling
 st.markdown("""
 <style>
@@ -282,6 +291,7 @@ def save_to_supabase(score=None):
         data = {
             # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
+            "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
             "started_at": start_time.isoformat(),  # 시작 시간 추가 (ISO 형식 문자열로 변환)
             "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
             "interaction_time": interaction_time,  # 초 단위 정수로 저장
@@ -303,6 +313,47 @@ def save_to_supabase(score=None):
     except Exception as e:
         st.error(f"데이터 저장 중 오류 발생: {str(e)}")
         return False
+
+def validate_participant_id(participant_id):
+    """
+    Validate participant ID from Supabase participants table
+    
+    Returns:
+        (bool, str): (valid, message)
+    """
+    try:
+        # Master key check
+        if participant_id == "j719":
+            return True, "Admin access confirmed"
+        
+        # Format check: a, b, c, d followed by 3 digits (001~100)
+        import re
+        if not re.match(r'^[a-d][0-9]{3}$', participant_id):
+            return False, "Invalid participant ID format. Must be a, b, c, or d + 3 digits (e.g., a001)"
+        
+        # Check if number part is in 001-100 range
+        num_part = int(participant_id[1:])
+        if num_part < 1 or num_part > 100:
+            return False, "Invalid participant ID. Number must be in 1-100 range."
+        
+        # Look up ID in Supabase
+        result = supabase.table("participants").select("*").eq("id", participant_id).execute()
+        
+        # If ID doesn't exist in participants table
+        if not result.data:
+            return False, "Participant ID not registered."
+        
+        # Check if ID is already used
+        if result.data[0].get("used", False):
+            return False, "This participant ID has already been used."
+        
+        # If valid ID, update used status
+        supabase.table("participants").update({"used": True, "used_at": datetime.datetime.now().isoformat()}).eq("id", participant_id).execute()
+        return True, "Participant verified successfully."
+    
+    except Exception as e:
+        st.error(f"Error validating participant ID: {str(e)}")
+        return False, f"An error occurred: {str(e)}"
 
 # Sidebar for settings
 with st.sidebar:
@@ -388,100 +439,176 @@ def on_next_click():
     st.session_state.show_survey = True
     st.session_state.show_next_button = False
 
-# 설문조사 또는 채팅 UI 표시
-if st.session_state.show_survey:
-    st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
-    st.markdown("**Do you want to talk more with this chatbot?**")
+# 채팅 페이지 상단에 참가자 ID 표시 추가
+def show_chat_page():
+    # 상단에 참가자 ID 표시
+    st.markdown(f"<div style='text-align: right; font-size: 0.8em; color: #666;'>Participant ID: {st.session_state.participant_id}</div>", unsafe_allow_html=True)
     
-    # 슬라이더 UI 개선
-    col1, col2, col3 = st.columns([1, 10, 1])
-    
-    with col1:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Disagree)</div>", unsafe_allow_html=True)
+    # 설문 조사 또는 채팅 UI 표시
+    if st.session_state.show_survey:
+        st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
+        st.markdown("**Do you want to talk more with this chatbot?**")
         
-    with col2:
-        score = st.slider("", 1, 9, 5, label_visibility="collapsed")
+        # 슬라이더 UI 개선
+        col1, col2, col3 = st.columns([1, 10, 1])
         
-    with col3:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Agree)</div>", unsafe_allow_html=True)
+        with col1:
+            st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Disagree)</div>", unsafe_allow_html=True)
+            
+        with col2:
+            score = st.slider("", 1, 9, 5, label_visibility="collapsed")
+            
+        with col3:
+            st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Agree)</div>", unsafe_allow_html=True)
+        
+        if st.button("Submit Survey"):
+            # Supabase에 데이터 저장
+            if save_to_supabase(score):
+                st.success(f"Thank you for your feedback! Your score: {score}")
+            else:
+                st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
+            
+            # 일정 시간 후 완료 페이지로 이동
+            time.sleep(2)
+            
+            # 앱 상태를 완료 페이지로 설정
+            st.session_state.app_state = "complete"
+            st.rerun()
+    else:
+        # 기존 채팅 UI 코드
+        st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+
+        # Display the introductory message with reduced width
+        st.markdown(
+            "<div class='system-message'>You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". "
+            "Click the button with the question to begin the first turn. "
+            "After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Greeni will respond to your messages.</div>",
+            unsafe_allow_html=True
+        )
+
+        # Display remaining turns
+        st.markdown(
+            f"<div class='remaining-turns'>Remaining turns: {st.session_state.max_turns - st.session_state.current_turn}</div>",
+            unsafe_allow_html=True
+        )
+
+        # Conversation starter button
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if not st.session_state.conversation_started and st.button(
+                "Greeni, explain about 'Pet cloning'", 
+                key="conversation_starter",
+            ):
+                # Start tracking time
+                st.session_state.interaction_start = datetime.datetime.now()
+                
+                # Set conversation as started
+                st.session_state.conversation_started = True
+                
+                # Add user message
+                prompt = "Greeni, explain about 'Pet cloning'"
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                
+                # Generate and add bot response
+                response = generate_response(prompt)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                
+                # Force a rerun to show the messages
+                st.rerun()
+
+        # Display chat messages
+        for message in st.session_state.messages:
+            if message["role"] == "user":
+                st.markdown(
+                    f"<div class='user-bubble'>{message['content']}</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
+                    unsafe_allow_html=True
+                )
+
+        # Next 버튼 표시 (대화가 모두 끝났을 때)
+        if st.session_state.show_next_button:
+            st.button("Next →", on_click=on_next_click, type="primary")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Chat input (only show if conversation has started and max turns not reached)
+        if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
+            prompt = st.chat_input("Type your message here...")
+            if prompt:
+                # Add user message
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                
+                # Generate and add bot response
+                response = generate_response(prompt)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                
+                # Force a rerun to show the messages
+                st.rerun()
+
+def show_participant_id_page():
+    st.title("Participant Information")
     
-    if st.button("Submit Survey"):
-        # Supabase에 데이터 저장
-        if save_to_supabase(score):
-            st.success(f"Thank you for your feedback! Your score: {score}")
-        else:
-            st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
-else:
-    # 기존 채팅 UI 코드
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
-
-    # Display the introductory message with reduced width
-    st.markdown(
-        "<div class='system-message'>You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". "
-        "Click the button with the question to begin the first turn. "
-        "After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Greeni will respond to your messages.</div>",
-        unsafe_allow_html=True
-    )
-
-    # Display remaining turns
-    st.markdown(
-        f"<div class='remaining-turns'>Remaining turns: {st.session_state.max_turns - st.session_state.current_turn}</div>",
-        unsafe_allow_html=True
-    )
-
-    # Conversation starter button
-    col1, col2 = st.columns([3, 1])
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
     with col2:
-        if not st.session_state.conversation_started and st.button(
-            "Greeni, explain about 'Pet cloning'", 
-            key="conversation_starter",
-        ):
-            # Start tracking time
-            st.session_state.interaction_start = datetime.datetime.now()
+        st.markdown("### Please enter your participant ID")
+        st.markdown("Enter the participant ID provided for this experiment.")
+        
+        # Participant ID input field
+        participant_id = st.text_input(
+            "Participant ID", 
+            value=st.session_state.participant_id,
+            key="participant_id_input",
+            placeholder="e.g., a001"
+        )
+        
+        # Start experiment button
+        if st.button("Start Experiment", type="primary", key="start_experiment_btn"):
+            # Validate participant ID
+            valid, message = validate_participant_id(participant_id)
             
-            # Set conversation as started
-            st.session_state.conversation_started = True
-            
-            # Add user message
-            prompt = "Greeni, explain about 'Pet cloning'"
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            # Generate and add bot response
-            response = generate_response(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Force a rerun to show the messages
+            if valid:
+                st.session_state.participant_id = participant_id
+                st.session_state.app_state = "chat"
+                st.success(message)
+                time.sleep(1)  # Show success message briefly
+                st.rerun()
+            else:
+                st.error(message)
+
+def show_complete_page():
+    """완료 페이지 표시"""
+    # 중앙 정렬을 위한 컬럼 사용
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<h1 style='text-align: center; margin-top: 100px;'>Thank you for your participation!</h1>", unsafe_allow_html=True)
+        
+        # 다시 시작 버튼 (옵션)
+        st.markdown("<div style='text-align: center; margin-top: 50px;'>", unsafe_allow_html=True)
+        if st.button("Start a new conversation", type="primary", key="restart_btn"):
+            # 세션 상태 초기화
+            st.session_state.app_state = "participant_id"
+            st.session_state.participant_id = ""
+            st.session_state.messages = []
+            st.session_state.conversation_started = False
+            st.session_state.current_turn = 0
+            st.session_state.interaction_start = None
+            st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            st.session_state.show_survey = False
+            st.session_state.next_clicked = False
+            st.session_state.show_next_button = False
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # Display chat messages
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            st.markdown(
-                f"<div class='user-bubble'>{message['content']}</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"<div class='bot-name'>Greeni</div><div class='bot-bubble'>{message['content']}</div>",
-                unsafe_allow_html=True
-            )
-
-    # Next 버튼 표시 (대화가 모두 끝났을 때)
-    if st.session_state.show_next_button:
-        st.button("Next →", on_click=on_next_click, type="primary")
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Chat input (only show if conversation has started and max turns not reached)
-    if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
-        prompt = st.chat_input("Type your message here...")
-        if prompt:
-            # Add user message
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            # Generate and add bot response
-            response = generate_response(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Force a rerun to show the messages
-            st.rerun()
+# 앱 상태에 따라 다른 UI 표시
+if st.session_state.app_state == "participant_id":
+    show_participant_id_page()
+elif st.session_state.app_state == "chat":
+    show_chat_page()
+elif st.session_state.app_state == "complete":
+    show_complete_page()
