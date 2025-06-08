@@ -268,27 +268,32 @@ def save_to_supabase(score=None):
     try:
         # 시간 정보 계산
         if st.session_state.interaction_start:
+            start_time = st.session_state.interaction_start
             end_time = datetime.datetime.now()
-            elapsed = end_time - st.session_state.interaction_start
-            duration_seconds = int(elapsed.total_seconds())
-            interaction_time = f"{duration_seconds // 60} min {duration_seconds % 60} sec"
+            elapsed = end_time - start_time
+            duration_seconds = int(elapsed.total_seconds())  # 초 단위 정수
+            interaction_time = duration_seconds  # 초 단위 정수를 저장
         else:
+            start_time = datetime.datetime.now()  # 시작 시간이 없으면 현재 시간으로 설정
+            end_time = None
             interaction_time = None
         
         # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
         data = {
             # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
-            "interaction_time": interaction_time,
+            "started_at": start_time.isoformat(),  # 시작 시간 추가 (ISO 형식 문자열로 변환)
+            "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
+            "interaction_time": interaction_time,  # 초 단위 정수로 저장
             "total_tokens": st.session_state.token_usage["total_tokens"],
             "prompt_tokens": st.session_state.token_usage["prompt_tokens"],
             "completion_tokens": st.session_state.token_usage["completion_tokens"],
             "score": score,
-            "messages": st.session_state.messages  # 대화 내용 저장
+            "messages": st.session_state.messages
         }
         
         # Supabase에 데이터 저장
-        result = supabase.table("chatbot_logs").insert(data).execute()
+        result = supabase.table("LLM1").insert(data).execute()
         
         # 저장 성공 여부 확인
         if result.data:

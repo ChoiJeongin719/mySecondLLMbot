@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 import json
 import glob
 import datetime  # For time measurement
+import time  # Add this import for time.sleep()
+import uuid
+from supabase import create_client, Client
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,18 +20,23 @@ st.set_page_config(
 )
 
 # Initialize app state (to switch between chat and survey)
+# 참가자 ID 관리
+if "participant_id" not in st.session_state:
+    st.session_state.participant_id = ""
+
+# 앱 상태 기본값을 participant_id로 변경
 if "app_state" not in st.session_state:
-    st.session_state.app_state = "chat"  # 'chat' or 'survey'
+    st.session_state.app_state = "participant_id"  # 'participant_id', 'chat', 'survey', 'complete'
 
 # Initialize session state variables if they don't exist
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
+    st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
 
 if "system_message_pro" not in st.session_state:
-    st.session_state.system_message_pro = "You are a debater who takes a supportive stance on the topic presented by the user. Please provide logical and persuasive opinions in favor of the topic. Answer in 4 sentences or less."
+    st.session_state.system_message_pro = "이 프롬프트는 전체 토론의 절반입니다. '퍼플이'라는 캐릭터로서 반려동물 복제에 찬성하는 입장을 4문장으로 하나의 단락으로 작성해주세요. 말투는 친근하지만 대화체는 피하고, 이름 부르기 없이 자연스럽게 써주세요."
 
 if "system_message_con" not in st.session_state:
-    st.session_state.system_message_con = "You are a debater who takes an opposing stance on the topic presented by the user. Please provide logical and persuasive opinions against the topic. Answer in 4 sentences or less."
+    st.session_state.system_message_con = "이 프롬프트는 동일한 주제의 반대 입장입니다. '노랑이'라는 캐릭터로서 반려동물 복제에 반대하는 입장을 4문장으로 하나의 단락으로 작성해주세요. 말투는 친근하지만 대화체는 피하고, 이름 부르기 없이 자연스럽게 써주세요."
 
 if "usage_stats" not in st.session_state:
     st.session_state.usage_stats = []
@@ -63,6 +71,23 @@ if "max_turns" not in st.session_state:
 # Survey response
 if "survey_response" not in st.session_state:
     st.session_state.survey_response = 5  # 기본값 (중간)
+
+# 사용자 ID 생성 (세션 시작시 한번만)
+if "user_id" not in st.session_state:
+    st.session_state.user_id = str(uuid.uuid4())
+
+# 상호작용 시작 시간 추적을 위한 변수
+if "interaction_start" not in st.session_state:
+    st.session_state.interaction_start = None
+
+# 토큰 사용량 추적을 위한 변수
+if "token_usage" not in st.session_state:
+    st.session_state.token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+# Supabase 클라이언트 초기화
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(supabase_url, supabase_key)
 
 # Usage time tracking function
 def update_session_time():
@@ -408,8 +433,138 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Supabase에 데이터 저장 함수 추가
+def save_to_supabase(score=None):
+    """Supabase의 LLM2 테이블에 데이터 저장"""
+    try:
+        # 시간 정보 계산
+        if st.session_state.interaction_start:
+            start_time = st.session_state.interaction_start
+            end_time = datetime.datetime.now()
+            elapsed = end_time - start_time
+            duration_seconds = int(elapsed.total_seconds())  # 초 단위 정수
+            interaction_time = duration_seconds  # 초 단위 정수로 저장
+        else:
+            start_time = datetime.datetime.now()  # 시작 시간이 없으면 현재 시간으로 설정
+            end_time = None
+            interaction_time = None
+        
+        # 토큰 사용량 계산 (사용 통계에서 계산)
+        if st.session_state.usage_stats:
+            total_prompt = sum(u["prompt_tokens"] for u in st.session_state.usage_stats)
+            total_completion = sum(u["completion_tokens"] for u in st.session_state.usage_stats)
+            total_tokens = sum(u["total_tokens"] for u in st.session_state.usage_stats)
+        else:
+            total_prompt = 0
+            total_completion = 0
+            total_tokens = 0
+        
+        # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
+        data = {
+            # timestamp는 기본값 now()를 사용
+            "user_id": st.session_state.user_id,
+            "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
+            "started_at": start_time.isoformat() if start_time else None,  # 시작 시간 추가
+            "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
+            "interaction_time": interaction_time,  # 초 단위 정수로 저장
+            "total_tokens": total_tokens,
+            "prompt_tokens": total_prompt,
+            "completion_tokens": total_completion,
+            "score": score,
+            "messages": st.session_state.messages
+        }
+        
+        # Supabase에 데이터 저장 (LLM2 테이블에 저장)
+        result = supabase.table("LLM2").insert(data).execute()
+        
+        # 저장 성공 여부 확인
+        if result.data:
+            return True
+        return False
+    
+    except Exception as e:
+        st.error(f"데이터 저장 중 오류 발생: {str(e)}")
+        return False
+
+# 참가자 ID 검증 함수 수정 (약 495줄 근처)
+def validate_participant_id(participant_id):
+    """
+    Supabase의 participants 테이블에서 참가자 ID 유효성 검증
+    
+    Returns:
+        (bool, str): (유효성 여부, 메시지)
+    """
+    try:
+        # 마스터키 확인
+        if participant_id == "j719":
+            return True, "관리자 접속 확인 완료"
+        
+        # 형식 검사: a, b, c, d로 시작하고 뒤에 3자리 숫자 (001~100)
+        import re
+        if not re.match(r'^[a-d][0-9]{3}$', participant_id):
+            return False, "유효하지 않은 참가자 번호 형식입니다. a, b, c, d + 3자리 숫자 형식이어야 합니다. (예: a001)"
+        
+        # 숫자 부분이 001~100 범위인지 확인
+        num_part = int(participant_id[1:])
+        if num_part < 1 or num_part > 100:
+            return False, "유효하지 않은 참가자 번호입니다. 1~100 범위의 숫자만 허용됩니다."
+        
+        # Supabase에서 해당 ID 조회
+        result = supabase.table("participants").select("*").eq("id", participant_id).execute()
+        
+        # participants 테이블에 해당 ID가 없으면
+        if not result.data:
+            return False, "등록되지 않은 참가자 번호입니다."
+        
+        # ID가 이미 사용되었는지 확인
+        if result.data[0].get("used", False):
+            return False, "이미 사용된 참가자 번호입니다."
+        
+        # 유효한 ID가 있으면 사용 상태 업데이트
+        supabase.table("participants").update({"used": True, "used_at": datetime.datetime.now().isoformat()}).eq("id", participant_id).execute()
+        return True, "참가자 확인 완료"
+    
+    except Exception as e:
+        st.error(f"참가자 ID 검증 중 오류 발생: {str(e)}")
+        return False, f"오류가 발생했습니다: {str(e)}"
+
+# 참가자 ID 입력 페이지 함수 추가 (show_chat_page 함수 위에 추가)
+def show_participant_id_page():
+    st.title("참가자 정보 입력")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("### 참가자 번호를 입력해 주세요")
+        st.markdown("실험 참여를 위해 제공받은 참가자 번호를 입력하세요.")
+        
+        # 참가자 ID 입력 필드
+        participant_id = st.text_input(
+            "참가자 번호", 
+            value=st.session_state.participant_id,
+            key="participant_id_input",
+            placeholder="예: a001"
+        )
+        
+        # 실험 시작 버튼
+        if st.button("실험 시작하기", type="primary", key="start_experiment_btn"):
+            # 참가자 ID 검증
+            valid, message = validate_participant_id(participant_id)
+            
+            if valid:
+                st.session_state.participant_id = participant_id
+                st.session_state.app_state = "chat"
+                st.success(message)
+                time.sleep(1)  # 성공 메시지 잠시 표시
+                st.rerun()
+            else:
+                st.error(message)
+
 # 대화 페이지
 def show_chat_page():
+    # 상단에 참가자 ID 표시 추가
+    st.markdown(f"<div style='text-align: right; font-size: 0.8em; color: #666;'>참가자 번호: {st.session_state.participant_id}</div>", unsafe_allow_html=True)
+    
     # Sidebar settings
     with st.sidebar:
         st.subheader("Settings")
@@ -497,8 +652,8 @@ def show_chat_page():
                 st.write("No usage data available yet.")
         
         # Reset chat button
-        if st.button("Reset Chat"):
-            st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
+        if st.button("대화 초기화"):
+            st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
             st.session_state.usage_stats = []
             st.session_state.conversation_started = False
             st.session_state.current_turn = 0
@@ -510,7 +665,7 @@ def show_chat_page():
             st.session_state.total_session_duration = datetime.timedelta(0)
             st.session_state.interaction_count = 0
             
-            st.success("Chat history has been reset!")
+            st.success("대화 기록이 초기화되었습니다!")
         
         # Process display toggle
         st.markdown("---")
@@ -542,17 +697,20 @@ def show_chat_page():
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if not st.session_state.conversation_started and st.button(
-                            "Explain about 'Pet Cloning'",
+                            "퍼플아, 노랑아, 죽은 반려동물의 복제에 대해 알려줄래?",
                             key="conversation_starter"
                         ):
+                            # 상호작용 시작 시간 기록
+                            st.session_state.interaction_start = datetime.datetime.now()
+                            
                             st.session_state.conversation_started = True
                             st.session_state.current_turn = 1
-                            user_prompt = "Explain about 'Pet cloning'"
+                            user_prompt = "퍼플아, 노랑아, 죽은 반려동물의 복제에 대해 알려줄래?"
                             st.session_state.messages.append({"role": "user", "content": user_prompt})
                             
-                            # 고정된 첫 응답
-                            purpli_response = "Cloning a deceased pet involves using biotechnology to create a new animal that is genetically identical to the original. For many people, pets are like family, so the idea of meeting them again in any form can be deeply comforting. With today's advanced technology, cloning has become a realistic option. Some also believe it's worth preserving the genes of special animals—like service dogs or police dogs—through cloning."
-                            yellowy_response = "Cloning from a deceased pet involves complex steps—DNA must be extracted from preserved tissue, then an embryo is formed and implanted into a surrogate. Even if the cloned pet looks the same and shares the same genes, it won't have the same memories or personality, and the sense of loss may still remain. There are many abandoned animals waiting to be adopted, and providing care for them may be a more meaningful choice than cloning."
+                            # 고정된 첫 응답 (purpli_response와 yellowy_response 변수 수정)
+                            purpli_response = "죽은 반려동물을 복제하는 건 생명공학 기술로 원래 동물과 유전적으로 똑같은 새로운 동물을 만드는 거야. 많은 사람들에게 반려동물은 가족 같은 존재니까, 어떤 형태로든 다시 만날 수 있다는 생각 자체가 큰 위로가 될 수 있어. 요즘 기술이 많이 발달해서 복제도 현실적으로 가능한 선택지가 됐고. 또 어떤 사람들은 특별한 동물들, 예를 들어 안내견이나 경찰견 같은 아이들의 유전자를 복제를 통해 보존할 가치가 있다고 생각하기도 해."
+                            yellowy_response = "죽은 반려동물 복제는 꽤 복잡한 과정을 거쳐야 해. 보존된 조직에서 DNA를 추출하고, 배아를 만들어서 대리모에게 이식하는 과정이 필요하거든. 복제된 반려동물이 똑같이 생기고 같은 유전자를 가져도, 예전의 기억이나 성격은 똑같지 않을 거고, 상실감은 여전히 남을 수 있어. 그리고 입양을 기다리는 유기동물들이 정말 많은데, 복제보다는 그런 아이들을 돌보는 게 더 의미 있는 선택일 수도 있어."
                             
                             st.session_state.messages.append({"role": "assistant", "content": purpli_response, "type": "pro"})
                             st.session_state.messages.append({"role": "assistant", "content": yellowy_response, "type": "con"})
@@ -590,10 +748,10 @@ def show_chat_page():
         
         # 대화 턴 수가 최대에 도달했으면 Next 버튼 표시
         if st.session_state.conversation_started and st.session_state.current_turn >= st.session_state.max_turns:
-            st.markdown("<div style='text-align: center; margin-top: 30px;'>You have reached the maximum number of turns.</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align: center; margin-top: 30px;'>최대 대화 턴 수에 도달했습니다.</div>", unsafe_allow_html=True)
             
             # Next 버튼
-            if st.button("Next", key="next_to_survey", type="primary"):
+            if st.button("다음", key="next_to_survey", type="primary"):
                 st.session_state.app_state = "survey"
                 st.rerun()
         
@@ -601,7 +759,7 @@ def show_chat_page():
 
     # Chat input (Only show if conversation not finished)
     if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
-        if prompt := st.chat_input("Enter a topic you want to discuss..."):
+        if prompt := st.chat_input("메시지를 입력하세요..."):
             # Display user message without chatbot icon
             st.markdown(
                 f"<div class='user-bubble'>{prompt}</div>",
@@ -619,45 +777,70 @@ def show_chat_page():
 
 # 설문조사 페이지
 def show_survey_page():
-    st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
-    st.markdown("**Do you want to talk more with this chatbot?**")
+    st.markdown("<h2>설문조사</h2>", unsafe_allow_html=True)
+    st.markdown("**이 챗봇과 더 대화하고 싶으신가요?**")
     
     # 슬라이더 UI 개선 - 3개의 열 사용
     col1, col2, col3 = st.columns([1, 10, 1])
     
     with col1:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Disagree)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(동의하지 않음)</div>", unsafe_allow_html=True)
         
     with col2:
         # 라벨 숨기기
         st.session_state.survey_response = st.slider("", 1, 9, st.session_state.survey_response, label_visibility="collapsed")
         
     with col3:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Agree)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(동의함)</div>", unsafe_allow_html=True)
     
     # 제출 버튼 중앙 정렬
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("Submit Survey", type="primary", key="survey_submit"):
-            st.success(f"Thank you for your feedback! Your score: {st.session_state.survey_response}")
+        if st.button("설문 제출", type="primary", key="survey_submit"):
+            # Supabase에 데이터 저장
+            if save_to_supabase(st.session_state.survey_response):
+                st.success(f"피드백에 감사드립니다! 점수: {st.session_state.survey_response}")
+            else:
+                st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
             
-            # 여기에 결과 저장 로직 추가 가능
-            # (Supabase 연동 코드를 추가하려면 app.py의 save_to_supabase 함수도 가져와야 함)
-            
-            # 일정 시간 후 채팅으로 돌아가기
+            # 일정 시간 후 완료 페이지로 이동
             time.sleep(2)
             
-            # 대화 페이지로 돌아가기 및 초기화
-            st.session_state.app_state = "chat"
-            st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
-            st.session_state.conversation_started = False
-            st.session_state.current_turn = 0
+            # 완료 페이지로 이동
+            st.session_state.app_state = "complete"
             st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
 
+# 실험 완료 페이지 함수 추가 (show_survey_page 함수 다음에 추가)
+def show_complete_page():
+    st.title("실험 완료")
+    
+    # 중앙에 메시지 표시
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("### 실험이 완료되었습니다.")
+        st.markdown("구글폼에서 설문을 완료해주세요. 참여해주셔서 감사합니다.")
+        
+        # 다시 시작 버튼 (선택적)
+        if st.button("새로운 실험 시작", key="restart_btn"):
+            # 세션 상태 초기화
+            st.session_state.app_state = "participant_id"
+            st.session_state.participant_id = ""
+            st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
+            st.session_state.conversation_started = False
+            st.session_state.current_turn = 0
+            st.session_state.interaction_start = None
+            st.session_state.usage_stats = []
+            st.rerun()
+
 # 앱 상태에 따라 적절한 페이지 표시
-if st.session_state.app_state == "chat":
+if st.session_state.app_state == "participant_id":
+    show_participant_id_page()
+elif st.session_state.app_state == "chat":
     show_chat_page()
 elif st.session_state.app_state == "survey":
     show_survey_page()
+elif st.session_state.app_state == "complete":
+    show_complete_page()

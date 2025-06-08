@@ -26,17 +26,25 @@ if "participant_id" not in st.session_state:
 
 # 앱 상태 기본값을 participant_id로 변경
 if "app_state" not in st.session_state:
-    st.session_state.app_state = "participant_id"  # 'participant_id', 'chat', 'survey', or 'complete'
+    st.session_state.app_state = "participant_id"  # 'participant_id', 'chat', 'survey', 'complete'
 
 # Initialize session state variables if they don't exist
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
+    st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
 
-if "system_message_pro" not in st.session_state:
-    st.session_state.system_message_pro = "You are 'Purpli', a debater who takes a supportive stance on cloning a deceased pet. Please provide logical and persuasive opinions in favor of the topic. Answer in simple 4 sentences."
+if "system_message" not in st.session_state:
+    st.session_state.system_message = """다음 주제에 대해 두 캐릭터의 의견을 각각 4문장으로 말해주세요.  
+각 캐릭터는 하나의 문단으로 자연스럽게 말하고, 반드시 정확히 4개의 문장을 사용해야 합니다.  
+말투는 친근하게 해주세요. 
+문장 수를 넘기거나 줄이지 말고, 이름을 본문에 포함시키지 마세요.  
 
-if "system_message_con" not in st.session_state:
-    st.session_state.system_message_con = "You are 'Yellowy', who takes an opposing stance on cloning a deceased pet. Please provide logical and persuasive opinions against the topic. Answer in simple 4 sentences."
+
+형식:
+Purpli  
+죽은 반려동물을 복제하는 건 생명공학 기술로 원래 동물과 유전적으로 똑같은 새로운 동물을 만드는 거야. 많은 사람들에게 반려동물은 가족 같은 존재니까, 어떤 형태로든 다시 만날 수 있다는 생각 자체가 큰 위로가 될 수 있어. 요즘 기술이 많이 발달해서 복제도 현실적으로 가능한 선택지가 됐고. 또 어떤 사람들은 특별한 동물들, 예를 들어 안내견이나 경찰견 같은 아이들의 유전자를 복제를 통해 보존할 가치가 있다고 생각하기도 해.
+
+Yellowy  
+죽은 반려동물 복제는 꽤 복잡한 과정을 거쳐야 해. 보존된 조직에서 DNA를 추출하고, 배아를 만들어서 대리모에게 이식하는 과정이 필요하거든. 복제된 반려동물이 똑같이 생기고 같은 유전자를 가져도, 예전의 기억이나 성격은 똑같지 않을 거고, 상실감은 여전히 남을 수 있어. 그리고 입양을 기다리는 유기동물들이 정말 많은데, 복제보다는 그런 아이들을 돌보는 게 더 의미 있는 선택일 수도 있어."""
 
 if "usage_stats" not in st.session_state:
     st.session_state.usage_stats = []
@@ -124,8 +132,9 @@ def get_openai_client():
         api_key=token,
     )
 
+# generate_debate_responses 함수 수정 (약 130-215줄 근처)
 def generate_debate_responses(prompt):
-    """Generate two separate responses - one pro, one con"""
+    """Generate both pro and con responses with a single API call"""
     # Update interaction time
     update_session_time()
     
@@ -138,146 +147,71 @@ def generate_debate_responses(prompt):
         if msg["role"] != "system" and "type" not in msg:  # Skip system messages
             history.append(msg)
     
-    # Generate pro messages
-    pro_messages = [{"role": "system", "content": st.session_state.system_message_pro}] + history + [{"role": "user", "content": prompt}]
-    
-    # Generate con messages
-    con_messages = [{"role": "system", "content": st.session_state.system_message_con}] + history + [{"role": "user", "content": prompt}]
+    # Prepare messages with the unified system prompt
+    messages = [{"role": "system", "content": st.session_state.system_message}] + history + [{"role": "user", "content": prompt}]
     
     try:
         # Display response in chat format
         status_placeholder = st.empty()
-        status_placeholder.markdown("Generating response...", unsafe_allow_html=True)
+        status_placeholder.markdown("응답 생성 중...", unsafe_allow_html=True)
         
-        # Generate pro response
-        full_pro_response = ""
-        usage_pro = None
-        
-        pro_response = client.chat.completions.create(
-            messages=pro_messages,
-            model=model_name,
-            stream=True,
-            stream_options={'include_usage': True}
+        # Generate response with single API call (non-streaming first to debug)
+        response = client.chat.completions.create(
+            messages=messages,
+            model=model_name
         )
         
-        # Add pro response
-        pro_placeholder = st.empty()
+        # Get the full response text
+        full_response = response.choices[0].message.content
         
-        # Stream pro response
-        for chunk in pro_response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                content_chunk = chunk.choices[0].delta.content
-                full_pro_response += content_chunk
-                pro_placeholder.markdown(
-                    f"<div class='pro-name'>Purpli</div><div class='pro-bubble'>{full_pro_response}▌</div>",
-                    unsafe_allow_html=True
-                )
-                
-            if chunk.usage:
-                usage_pro = chunk.usage
-        
-        # Update final pro response (remove cursor)
-        pro_placeholder.markdown(
-            f"<div class='pro-name'>Purpli</div><div class='pro-bubble'>{full_pro_response}</div>",
-            unsafe_allow_html=True
-        )
-        
-        # Generate con response
-        full_con_response = ""
-        usage_con = None
-        
-        con_response = client.chat.completions.create(
-            messages=con_messages,
-            model=model_name,
-            stream=True,
-            stream_options={'include_usage': True}
-        )
-        
-        # Add con response
-        con_placeholder = st.empty()
-        
-        # Stream con response
-        for chunk in con_response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                content_chunk = chunk.choices[0].delta.content
-                full_con_response += content_chunk
-                con_placeholder.markdown(
-                    f"<div class='con-name'>Yellowy</div><div class='con-bubble'>{full_con_response}▌</div>",
-                    unsafe_allow_html=True
-                )
-                
-            if chunk.usage:
-                usage_con = chunk.usage
-        
-        # Update final con response (remove cursor)
-        con_placeholder.markdown(
-            f"<div class='con-name'>Yellowy</div><div class='con-bubble'>{full_con_response}</div>",
-            unsafe_allow_html=True
-        )
-        
-        # Remove status display
-        status_placeholder.empty()
-        
-        # Add responses to session state
-        st.session_state.messages.append({"role": "assistant", "content": full_pro_response, "type": "pro"})
-        st.session_state.messages.append({"role": "assistant", "content": full_con_response, "type": "con"})
-        
-        # Save usage statistics
-        if usage_pro and usage_con:
-            # Handle Pydantic models
-            usage_pro_dict = usage_pro.model_dump() if hasattr(usage_pro, 'model_dump') else usage_pro.dict()
-            usage_con_dict = usage_con.model_dump() if hasattr(usage_con, 'model_dump') else usage_con.dict()
+        # Parse the response to extract Purpli and Yellowy parts
+        if "Purpli" in full_response and "Yellowy" in full_response:
+            # Split response by Yellowy
+            parts = full_response.split("Yellowy")
+            full_pro_response = parts[0].replace("Purpli", "").strip()
+            full_con_response = parts[1].strip()
             
-            st.session_state.usage_stats.append({
-                "prompt_tokens": usage_pro_dict.get("prompt_tokens", 0) + usage_con_dict.get("prompt_tokens", 0),
-                "completion_tokens": usage_pro_dict.get("completion_tokens", 0) + usage_con_dict.get("completion_tokens", 0),
-                "total_tokens": usage_pro_dict.get("total_tokens", 0) + usage_con_dict.get("total_tokens", 0)
-            })
-        
-        # If process display is activated
-        if st.session_state.show_process:
-            process_container = st.container()
-            with process_container:
-                st.markdown("### Model Processing")
+            # Display responses
+            st.markdown(
+                f"<div class='pro-name'>Purpli</div><div class='pro-bubble'>{full_pro_response}</div>",
+                unsafe_allow_html=True
+            )
+            
+            st.markdown(
+                f"<div class='con-name'>Yellowy</div><div class='con-bubble'>{full_con_response}</div>",
+                unsafe_allow_html=True
+            )
+            
+            # Add responses to session state
+            st.session_state.messages.append({"role": "assistant", "content": full_pro_response, "type": "pro"})
+            st.session_state.messages.append({"role": "assistant", "content": full_con_response, "type": "con"})
+            
+            # Save usage statistics if available
+            if hasattr(response, 'usage'):
+                usage_dict = response.usage.model_dump() if hasattr(response.usage, 'model_dump') else response.usage.dict()
                 
-                # Display request details
-                request_expander = st.expander("Request Details", expanded=False)
-                with request_expander:
-                    st.markdown("**Pro System Message:**")
-                    st.code(st.session_state.system_message_pro)
-                    st.markdown("**Con System Message:**")
-                    st.code(st.session_state.system_message_con)
-                    st.markdown("**User Input:**")
-                    st.code(prompt)
-                
-                # Display raw responses
-                response_expander = st.expander("Raw Responses", expanded=False)
-                with response_expander:
-                    st.markdown("**Pro Response:**")
-                    st.code(full_pro_response, language="markdown")
-                    st.markdown("**Con Response:**")
-                    st.code(full_con_response, language="markdown")
-                
-                # Display usage statistics
-                if usage_pro and usage_con:
-                    usage_expander = st.expander("Usage Statistics", expanded=False)
-                    with usage_expander:
-                        st.markdown("**Pro Response Usage:**")
-                        st.markdown(f"- Prompt tokens: {usage_pro_dict.get('prompt_tokens', 0)}")
-                        st.markdown(f"- Completion tokens: {usage_pro_dict.get('completion_tokens', 0)}")
-                        st.markdown(f"- Total tokens: {usage_pro_dict.get('total_tokens', 0)}")
-                        
-                        st.markdown("**Con Response Usage:**")
-                        st.markdown(f"- Prompt tokens: {usage_con_dict.get('prompt_tokens', 0)}")
-                        st.markdown(f"- Completion tokens: {usage_con_dict.get('completion_tokens', 0)}")
-                        st.markdown(f"- Total tokens: {usage_con_dict.get('total_tokens', 0)}")
-        
-        # 턴 수 증가
-        st.session_state.current_turn += 1
-        
-        return True
+                st.session_state.usage_stats.append({
+                    "prompt_tokens": usage_dict.get("prompt_tokens", 0),
+                    "completion_tokens": usage_dict.get("completion_tokens", 0),
+                    "total_tokens": usage_dict.get("total_tokens", 0)
+                })
+            
+            # 턴 수 증가
+            st.session_state.current_turn += 1
+            
+            # Remove status display
+            status_placeholder.empty()
+            
+            return True
+        else:
+            # Handle malformed response
+            st.error("응답 형식이 올바르지 않습니다. 두 캐릭터의 응답을 찾을 수 없습니다.")
+            st.write("원본 응답:", full_response)
+            status_placeholder.empty()
+            return False
+            
     except Exception as e:
-        st.error(f"Error generating responses: {str(e)}")
+        st.error(f"응답 생성 중 오류 발생: {str(e)}")
         return False
 
 # CSS style definition
@@ -464,7 +398,7 @@ def save_to_supabase(score=None):
             # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
             "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
-            "started_at": start_time.isoformat() if start_time else None,  # 시작 시간 추가 (ISO 형식 문자열로 변환)
+            "started_at": start_time.isoformat() if start_time else None,  # 시작 시간 추가
             "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
             "interaction_time": interaction_time,  # 초 단위 정수로 저장
             "total_tokens": total_tokens,
@@ -486,76 +420,76 @@ def save_to_supabase(score=None):
         st.error(f"데이터 저장 중 오류 발생: {str(e)}")
         return False
 
-# 참가자 ID 검증 함수 추가
+# 참가자 ID 검증 함수 수정 (약 495줄 근처)
 def validate_participant_id(participant_id):
     """
-    Validate participant ID from Supabase participants table
+    Supabase의 participants 테이블에서 참가자 ID 유효성 검증
     
     Returns:
-        (bool, str): (valid, message)
+        (bool, str): (유효성 여부, 메시지)
     """
     try:
-        # Master key check
+        # 마스터키 확인
         if participant_id == "j719":
-            return True, "Admin access confirmed"
+            return True, "관리자 접속 확인 완료"
         
-        # Format check: a, b, c, d followed by 3 digits (001~100)
+        # 형식 검사: a, b, c, d로 시작하고 뒤에 3자리 숫자 (001~100)
         import re
         if not re.match(r'^[a-d][0-9]{3}$', participant_id):
-            return False, "Invalid participant ID format. Must be a, b, c, or d + 3 digits (e.g., a001)"
+            return False, "유효하지 않은 참가자 번호 형식입니다. a, b, c, d + 3자리 숫자 형식이어야 합니다. (예: a001)"
         
-        # Check if number part is in 001-100 range
+        # 숫자 부분이 001~100 범위인지 확인
         num_part = int(participant_id[1:])
         if num_part < 1 or num_part > 100:
-            return False, "Invalid participant ID. Number must be in 1-100 range."
+            return False, "유효하지 않은 참가자 번호입니다. 1~100 범위의 숫자만 허용됩니다."
         
-        # Look up ID in Supabase
+        # Supabase에서 해당 ID 조회
         result = supabase.table("participants").select("*").eq("id", participant_id).execute()
         
-        # If ID doesn't exist in participants table
+        # participants 테이블에 해당 ID가 없으면
         if not result.data:
-            return False, "Participant ID not registered."
+            return False, "등록되지 않은 참가자 번호입니다."
         
-        # Check if ID is already used
+        # ID가 이미 사용되었는지 확인
         if result.data[0].get("used", False):
-            return False, "This participant ID has already been used."
+            return False, "이미 사용된 참가자 번호입니다."
         
-        # If valid ID, update used status
+        # 유효한 ID가 있으면 사용 상태 업데이트
         supabase.table("participants").update({"used": True, "used_at": datetime.datetime.now().isoformat()}).eq("id", participant_id).execute()
-        return True, "Participant verified successfully."
+        return True, "참가자 확인 완료"
     
     except Exception as e:
-        st.error(f"Error validating participant ID: {str(e)}")
-        return False, f"An error occurred: {str(e)}"
+        st.error(f"참가자 ID 검증 중 오류 발생: {str(e)}")
+        return False, f"오류가 발생했습니다: {str(e)}"
 
-# 참가자 ID 입력 페이지 함수 추가
+# 참가자 ID 입력 페이지 함수 추가 (show_chat_page 함수 위에 추가)
 def show_participant_id_page():
-    st.title("Participant Information")
+    st.title("참가자 정보 입력")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("### Please enter your participant ID")
-        st.markdown("Enter the participant ID provided for this experiment.")
+        st.markdown("### 참가자 번호를 입력해 주세요")
+        st.markdown("실험 참여를 위해 제공받은 참가자 번호를 입력하세요.")
         
-        # Participant ID input field
+        # 참가자 ID 입력 필드
         participant_id = st.text_input(
-            "Participant ID", 
+            "참가자 번호", 
             value=st.session_state.participant_id,
             key="participant_id_input",
-            placeholder="e.g., a001"
+            placeholder="예: a001"
         )
         
-        # Start experiment button
-        if st.button("Start Experiment", type="primary", key="start_experiment_btn"):
-            # Validate participant ID
+        # 실험 시작 버튼
+        if st.button("실험 시작하기", type="primary", key="start_experiment_btn"):
+            # 참가자 ID 검증
             valid, message = validate_participant_id(participant_id)
             
             if valid:
                 st.session_state.participant_id = participant_id
                 st.session_state.app_state = "chat"
                 st.success(message)
-                time.sleep(1)  # Show success message briefly
+                time.sleep(1)  # 성공 메시지 잠시 표시
                 st.rerun()
             else:
                 st.error(message)
@@ -563,7 +497,7 @@ def show_participant_id_page():
 # 대화 페이지
 def show_chat_page():
     # 상단에 참가자 ID 표시 추가
-    st.markdown(f"<div style='text-align: right; font-size: 0.8em; color: #666;'>Participant ID: {st.session_state.participant_id}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: right; font-size: 0.8em; color: #666;'>참가자 번호: {st.session_state.participant_id}</div>", unsafe_allow_html=True)
     
     # Sidebar settings
     with st.sidebar:
@@ -601,26 +535,17 @@ def show_chat_page():
             st.write(f"First usage time: {st.session_state.session_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             st.write(f"Last usage time: {st.session_state.last_interaction_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Edit pro system message
+        # Edit unified system message (replace separate pro/con inputs)
         st.text_area(
-            "Pro Chatbot Settings", 
-            value=st.session_state.system_message_pro,
-            key="system_message_pro_input",
-            height=150
+            "시스템 프롬프트 설정", 
+            value=st.session_state.system_message,
+            key="system_message_input",
+            height=300
         )
         
-        # Edit con system message
-        st.text_area(
-            "Con Chatbot Settings", 
-            value=st.session_state.system_message_con,
-            key="system_message_con_input",
-            height=150
-        )
-        
-        if st.button("Update System Messages"):
-            st.session_state.system_message_pro = st.session_state.system_message_pro_input
-            st.session_state.system_message_con = st.session_state.system_message_con_input
-            st.success("System messages have been updated!")
+        if st.button("프롬프트 업데이트"):
+            st.session_state.system_message = st.session_state.system_message_input
+            st.success("시스템 메시지가 업데이트되었습니다!")
         
         # Other sidebar elements
         st.markdown("---")
@@ -652,8 +577,8 @@ def show_chat_page():
                 st.write("No usage data available yet.")
         
         # Reset chat button
-        if st.button("Reset Chat"):
-            st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
+        if st.button("대화 초기화"):
+            st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
             st.session_state.usage_stats = []
             st.session_state.conversation_started = False
             st.session_state.current_turn = 0
@@ -665,7 +590,7 @@ def show_chat_page():
             st.session_state.total_session_duration = datetime.timedelta(0)
             st.session_state.interaction_count = 0
             
-            st.success("Chat history has been reset!")
+            st.success("대화 기록이 초기화되었습니다!")
         
         # Process display toggle
         st.markdown("---")
@@ -697,7 +622,7 @@ def show_chat_page():
                     col1, col2 = st.columns([3, 1])
                     with col2:
                         if not st.session_state.conversation_started and st.button(
-                            "Explain about 'Pet Cloning'",
+                            "퍼플아, 노랑아, 죽은 반려동물의 복제에 대해 알려줄래?",
                             key="conversation_starter"
                         ):
                             # 상호작용 시작 시간 기록
@@ -705,12 +630,12 @@ def show_chat_page():
                             
                             st.session_state.conversation_started = True
                             st.session_state.current_turn = 1
-                            user_prompt = "Explain about 'Pet cloning'"
+                            user_prompt = "퍼플아, 노랑아, 죽은 반려동물의 복제에 대해 알려줄래?"
                             st.session_state.messages.append({"role": "user", "content": user_prompt})
                             
-                            # 고정된 첫 응답
-                            purpli_response = "Cloning a deceased pet involves using biotechnology to create a new animal that is genetically identical to the original. For many people, pets are like family, so the idea of meeting them again in any form can be deeply comforting. With today's advanced technology, cloning has become a realistic option. Some also believe it's worth preserving the genes of special animals—like service dogs or police dogs—through cloning."
-                            yellowy_response = "Cloning from a deceased pet involves complex steps—DNA must be extracted from preserved tissue, then an embryo is formed and implanted into a surrogate. Even if the cloned pet looks the same and shares the same genes, it won't have the same memories or personality, and the sense of loss may still remain. There are many abandoned animals waiting to be adopted, and providing care for them may be a more meaningful choice than cloning."
+                            # 고정된 첫 응답 (한국어)
+                            purpli_response = "반려동물 복제는 생명공학 기술을 활용해 반려동물과 유전적으로 동일한 새로운 개체를 만들어내는 과정이야. 솔직히 반려동물은 가족 같은 존재라서, 어떤 형태로든 다시 만날 수 있다면 얼마나 좋을까 싶어. 요즘은 기술도 좋아졌으니까, 복제도 충분히 가능한 시대잖아. 특히 경찰견이나 안내견처럼 특별한 능력을 가진 동물의 유전자라면 복제할 필요도 있다고 생각해."
+                            yellowy_response = "생명을 복제한다는 것 자체가 단순한 과정으로 이루어지진 않아. 추출된 DNA를 바탕으로 수정란을 형성한 뒤 대리모를 통해 새끼를 출산하게 돼. 게다가 복제를 해서 외모나 유전자가 같아도 기억이나 성격까지 똑같을 순 없고, 결국 그리움은 남을 것 같아. 지금도 입양 기다리는 유기동물이 많은데, 복제보단 그런 아이들을 보살피는게 더 좋은 방향이라고 생각해."
                             
                             st.session_state.messages.append({"role": "assistant", "content": purpli_response, "type": "pro"})
                             st.session_state.messages.append({"role": "assistant", "content": yellowy_response, "type": "con"})
@@ -748,10 +673,10 @@ def show_chat_page():
         
         # 대화 턴 수가 최대에 도달했으면 Next 버튼 표시
         if st.session_state.conversation_started and st.session_state.current_turn >= st.session_state.max_turns:
-            st.markdown("<div style='text-align: center; margin-top: 30px;'>You have reached the maximum number of turns.</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align: center; margin-top: 30px;'>최대 대화 턴 수에 도달했습니다.</div>", unsafe_allow_html=True)
             
             # Next 버튼
-            if st.button("Next", key="next_to_survey", type="primary"):
+            if st.button("다음", key="next_to_survey", type="primary"):
                 st.session_state.app_state = "survey"
                 st.rerun()
         
@@ -759,7 +684,7 @@ def show_chat_page():
 
     # Chat input (Only show if conversation not finished)
     if st.session_state.conversation_started and st.session_state.current_turn < st.session_state.max_turns:
-        if prompt := st.chat_input("Enter a topic you want to discuss..."):
+        if prompt := st.chat_input("메시지를 입력하세요..."):
             # Display user message without chatbot icon
             st.markdown(
                 f"<div class='user-bubble'>{prompt}</div>",
@@ -777,61 +702,63 @@ def show_chat_page():
 
 # 설문조사 페이지
 def show_survey_page():
-    st.markdown("<h2>Survey</h2>", unsafe_allow_html=True)
-    st.markdown("**Do you want to talk more with this chatbot?**")
+    st.markdown("<h2>설문조사</h2>", unsafe_allow_html=True)
+    st.markdown("**이 챗봇과 더 대화하고 싶으신가요?**")
     
     # 슬라이더 UI 개선 - 3개의 열 사용
     col1, col2, col3 = st.columns([1, 10, 1])
     
     with col1:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Disagree)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(동의하지 않음)</div>", unsafe_allow_html=True)
         
     with col2:
         # 라벨 숨기기
         st.session_state.survey_response = st.slider("", 1, 9, st.session_state.survey_response, label_visibility="collapsed")
         
     with col3:
-        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(Agree)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; font-size: 0.9em;'>(동의함)</div>", unsafe_allow_html=True)
     
     # 제출 버튼 중앙 정렬
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("Submit Survey", type="primary", key="survey_submit"):
+        if st.button("설문 제출", type="primary", key="survey_submit"):
             # Supabase에 데이터 저장
             if save_to_supabase(st.session_state.survey_response):
-                st.success(f"Thank you for your feedback! Your score: {st.session_state.survey_response}")
+                st.success(f"피드백에 감사드립니다! 점수: {st.session_state.survey_response}")
             else:
                 st.warning("피드백이 저장되었지만, 데이터베이스 저장에 문제가 있었습니다.")
-    
+            
             # 일정 시간 후 완료 페이지로 이동
             time.sleep(2)
-    
+            
             # 완료 페이지로 이동
             st.session_state.app_state = "complete"
             st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 설문 완료 페이지 함수 추가 (show_survey_page 함수 다음에 추가)
+# 실험 완료 페이지 함수 추가 (show_survey_page 함수 다음에 추가)
 def show_complete_page():
-    # 중앙 정렬을 위한 컬럼 사용
+    st.title("실험 완료")
+    
+    # 중앙에 메시지 표시
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("<h1 style='text-align: center; margin-top: 100px;'>Thank you for your participation!</h1>", unsafe_allow_html=True)
+        st.markdown("### 실험이 완료되었습니다.")
+        st.markdown("구글폼에서 설문을 완료해주세요. 참여해주셔서 감사합니다.")
         
-        # 다시 시작 버튼 (옵션)
-        st.markdown("<div style='text-align: center; margin-top: 50px;'>", unsafe_allow_html=True)
-        if st.button("Start a new conversation", type="primary", key="restart_btn"):
-            # 대화 페이지로 돌아가기 및 초기화
-            st.session_state.app_state = "chat"
-            st.session_state.messages = [{"role": "assistant", "content": "You will engage in a four-turn conversation with a chatbot about \"Cloning of a deceased pet\". Click the button with the question to begin the first turn. After that, you will have three more turns to continue the conversation by typing freely. Start the conversation — Purpli and Yellowy will respond together.", "type": "system"}]
+        # 다시 시작 버튼 (선택적)
+        if st.button("새로운 실험 시작", key="restart_btn"):
+            # 세션 상태 초기화
+            st.session_state.app_state = "participant_id"
+            st.session_state.participant_id = ""
+            st.session_state.messages = [{"role": "assistant", "content": "\"죽은 반려동물의 복제\"에 대한 주제로 챗봇과 4턴의 대화를 나눌 것입니다. 첫 번째 턴을 시작하려면 질문 버튼을 클릭하세요. 그 후에는 자유롭게 메시지를 입력하여 세 번의 대화를 더 진행할 수 있습니다. 대화를 시작하세요 — 퍼플이와 노랑이가 함께 응답할 것입니다.", "type": "system"}]
             st.session_state.conversation_started = False
             st.session_state.current_turn = 0
-            st.session_state.interaction_start = None  # 시작 시간 초기화
-            st.session_state.usage_stats = []  # 사용 통계 초기화
+            st.session_state.interaction_start = None
+            st.session_state.usage_stats = []
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # 앱 상태에 따라 적절한 페이지 표시
 if st.session_state.app_state == "participant_id":
