@@ -160,7 +160,7 @@ def generate_debate_responses(prompt):
     update_session_time()
    
     client = get_openai_client()
-    model_name = os.getenv("GITHUB_MODEL", "openai/gpt-4o")
+    model_name = st.secrets["OPENAI_API_MODEL"]
    
     # Prepare previous conversation history (excluding the system message)
     history = []
