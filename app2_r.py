@@ -135,18 +135,23 @@ def update_session_time():
 
 
 def get_openai_client():
-    """Create and return an OpenAI client configured with environment variables"""
-    token = os.getenv("GITHUB_TOKEN")
-    endpoint = os.getenv("GITHUB_ENDPOINT", "https://models.github.ai/inference")
-   
-    if not token:
-        st.error("GitHub token not found in environment variables. Please check your .env file.")
+    """Create and return an OpenAI client configured with secret values"""
+    try:
+        token = st.secrets["OPENAI_API_KEY"]
+        endpoint = st.secrets["OPENAI_API_BASE"]
+    except KeyError as e:
+        st.error(f"필수 secret 값이 누락되었습니다: {str(e)}")
         st.stop()
-       
+
+    if not token or not endpoint:
+        st.error("OpenAI API key 또는 endpoint가 비어 있습니다. secrets.toml 파일을 확인해주세요.")
+        st.stop()
+
     return OpenAI(
         base_url=endpoint,
         api_key=token,
     )
+
 
 
 def generate_debate_responses(prompt):
