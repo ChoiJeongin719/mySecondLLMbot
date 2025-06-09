@@ -9,8 +9,6 @@ import time  # Add this import for time.sleep()
 import uuid
 from supabase import create_client, Client
 
-# Load environment variables from .env file
-load_dotenv()
 
 # Page configuration
 st.set_page_config(
@@ -113,8 +111,8 @@ def update_session_time():
 
 def get_openai_client():
     """Create and return an OpenAI client configured with environment variables"""
-    token = os.getenv("GITHUB_TOKEN")
-    endpoint = os.getenv("GITHUB_ENDPOINT", "https://models.github.ai/inference")
+    token = st.secrets["OPENAI_API_KEY"]
+    endpoint = st.secrets["OPENAI_API_BASE"]
     
     if not token:
         st.error("GitHub token not found in environment variables. Please check your .env file.")
@@ -131,7 +129,7 @@ def generate_debate_responses(prompt):
     update_session_time()
     
     client = get_openai_client()
-    model_name = os.getenv("GITHUB_MODEL", "openai/gpt-4o")
+    model_name = st.secrets["OPENAI_API_MODEL"]
     
     # Prepare previous conversation history (excluding the system message)
     history = []
