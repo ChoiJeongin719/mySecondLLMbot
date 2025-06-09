@@ -184,6 +184,21 @@ st.markdown("""
         border-bottom: 10px solid transparent;
         border-left: 10px solid #fce4ec;
     }
+    
+    /* 상황 설명 창 스타일 */
+    .stExpander {
+        border: 1px solid #f0f0f0;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .situation-box {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #9C27B0;
+        margin-bottom: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -196,6 +211,9 @@ def generate_response(prompt, message_history, is_male=True):
     system_prompt = st.session_state.male_bot_prompt if is_male else st.session_state.female_bot_prompt
     bot_name = st.session_state.male_bot_name if is_male else st.session_state.female_bot_name
     other_bot_name = st.session_state.female_bot_name if is_male else st.session_state.male_bot_name
+    
+    # 시스템 프롬프트에 명확한 지시 추가
+    system_prompt += f"\n\nImportant: You are ONLY {bot_name}. Don't simulate or include {other_bot_name}'s responses. Speak only in your own voice and perspective. Always end your message naturally without anticipating what {other_bot_name} will say next."
     
     # 메시지 히스토리 구성
     messages = [{"role": "system", "content": system_prompt}]
@@ -229,6 +247,12 @@ def generate_response(prompt, message_history, is_male=True):
         if content is None:
             return f"I'm thinking about {st.session_state.topic}... Let me gather my thoughts."
         
+        # 응답 검증 - 다른 캐릭터의 대화가 포함되었는지 확인
+        other_name = st.session_state.female_bot_name if is_male else st.session_state.male_bot_name
+        if f"{other_name}:" in content:
+            # 다른 캐릭터의 응답이 포함된 경우, 첫 번째 부분만 사용
+            content = content.split(f"{other_name}:")[0].strip()
+
         return content.strip()
     except Exception as e:
         st.error(f"Error generating response: {str(e)}")
@@ -280,6 +304,25 @@ st.markdown(f"<h1 class='conversation-title'>{st.session_state.male_bot_name} <s
 
 # 대화 주제 표시
 st.markdown(f"<div style='text-align: center; margin-bottom: 30px;'>Talking about: <b>{st.session_state.topic}</b></div>", unsafe_allow_html=True)
+
+# 상황 설명 창 추가
+if "situation_description" not in st.session_state:
+    st.session_state.situation_description = ""
+
+# 상황 설명 상자 (확장 가능한 컨테이너로 구현)
+with st.expander("Situation Context", expanded=True):
+    # 상황 설명 입력 또는 표시
+    situation_description = st.text_area(
+        "Enter situation context here:", 
+        value=st.session_state.situation_description,
+        height=100,
+        key="situation_input"
+    )
+    
+    # 상황 설명 업데이트 버튼
+    if st.button("Update Situation"):
+        st.session_state.situation_description = situation_description
+        st.success("Situation context updated!")
 
 # 대화 컨테이너
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
