@@ -5,6 +5,7 @@ from openai import OpenAI
 import datetime
 import uuid
 from supabase import create_client, Client  # 추가
+import logging
 
 # 사용자 ID 생성 (세션 시작시 한번만)
 if "user_id" not in st.session_state:
@@ -293,7 +294,7 @@ However, cloning from a deceased pet involves complex steps—DNA must be extrac
         return "I'm sorry, I encountered an error while processing your request."
 
 def save_to_supabase(score=None):
-    """Supabase에 데이터 저장"""
+    """Supabase logs 테이블에 데이터 저장 (condition=1)"""
     try:
         # 시간 정보 계산
         if st.session_state.interaction_start:
@@ -309,21 +310,21 @@ def save_to_supabase(score=None):
         
         # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
         data = {
-            # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
-            "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
-            "started_at": start_time.isoformat(),  # 시작 시간 추가 (ISO 형식 문자열로 변환)
-            "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
-            "interaction_time": interaction_time,  # 초 단위 정수로 저장
+            "participant_id": st.session_state.participant_id,
+            "started_at": start_time.isoformat(),
+            "finished_at": end_time.isoformat() if end_time else None,
+            "interaction_time": interaction_time,
             "total_tokens": st.session_state.token_usage["total_tokens"],
             "prompt_tokens": st.session_state.token_usage["prompt_tokens"],
             "completion_tokens": st.session_state.token_usage["completion_tokens"],
             "score": score,
-            "messages": st.session_state.messages
+            "messages": st.session_state.messages,
+            "condition": 1  # 항상 1로 저장
         }
         
-        # Supabase에 데이터 저장
-        result = supabase.table("LLM1").insert(data).execute()
+        # Supabase에 데이터 저장 (logs 테이블)
+        result = supabase.table("logs").insert(data).execute()
         
         # 저장 성공 여부 확인
         if result.data:
@@ -374,6 +375,13 @@ def validate_participant_id(participant_id):
     except Exception as e:
         st.error(f"Error validating participant ID: {str(e)}")
         return False, f"An error occurred: {str(e)}"
+
+# 에러 로그 파일 설정 (최상단에 한 번만)
+logging.basicConfig(
+    filename="participant_id_error.log",
+    level=logging.ERROR,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
 
 # Sidebar for settings
 with st.sidebar:
@@ -578,14 +586,12 @@ def show_participant_id_page():
         st.markdown("### Please enter your participant ID")
         st.markdown("Enter the participant ID provided for this experiment.")
         
-        # Participant ID input field (입력 예시 제거)
         participant_id = st.text_input(
             "Participant ID", 
             value=st.session_state.participant_id,
             key="participant_id_input"
         )
         
-        # Start experiment button
         if st.button("Start Experiment", type="primary", key="start_experiment_btn"):
             st.session_state.participant_id = participant_id
 
@@ -596,7 +602,8 @@ def show_participant_id_page():
                     "created_at": datetime.datetime.now().isoformat()
                 }).execute()
             except Exception as e:
-                st.warning(f"Could not save participant ID to DB: {e}")
+                # 사용자에게는 알림 없이, 에러를 로그 파일로 저장
+                logging.error(f"Could not save participant ID '{participant_id}' to DB: {e}")
 
             st.session_state.app_state = "chat"
             st.success("Participant ID saved. You can start chatting!")
