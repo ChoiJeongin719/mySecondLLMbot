@@ -499,7 +499,7 @@ st.markdown("""
 
 # Supabase에 데이터 저장 함수 추가
 def save_to_supabase(score=None):
-    """Supabase의 logs 테이블에 데이터 저장 (condition=4)"""
+    """Supabase의 LLM2 테이블에 데이터 저장"""
     try:
         # 시간 정보 계산
         if st.session_state.interaction_start:
@@ -512,7 +512,7 @@ def save_to_supabase(score=None):
             start_time = datetime.datetime.now()  # 시작 시간이 없으면 현재 시간으로 설정
             end_time = None
             interaction_time = None
-
+       
         # 토큰 사용량 계산 (사용 통계에서 계산)
         if st.session_state.usage_stats:
             total_prompt = sum(u["prompt_tokens"] for u in st.session_state.usage_stats)
@@ -522,31 +522,30 @@ def save_to_supabase(score=None):
             total_prompt = 0
             total_completion = 0
             total_tokens = 0
-
+       
         # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
         data = {
-            # id, timestamp는 DB에서 자동 생성
+            # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
-            "participant_id": st.session_state.participant_id,
-            "started_at": start_time.isoformat() if start_time else None,
-            "finished_at": end_time.isoformat() if end_time else None,
-            "interaction_time": interaction_time,
+            "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
+            "started_at": start_time.isoformat() if start_time else None,  # 시작 시간 추가 (ISO 형식 문자열로 변환)
+            "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
+            "interaction_time": interaction_time,  # 초 단위 정수로 저장
             "total_tokens": total_tokens,
             "prompt_tokens": total_prompt,
             "completion_tokens": total_completion,
             "score": score,
-            "messages": st.session_state.messages,
-            "condition": 4  # 항상 4로 저장
+            "messages": st.session_state.messages
         }
-
-        # Supabase에 데이터 저장 (logs 테이블)
-        result = supabase.table("logs").insert(data).execute()
-
+       
+        # Supabase에 데이터 저장 (LLM2_R 테이블에 저장)
+        result = supabase.table("LLM2_R").insert(data).execute()
+       
         # 저장 성공 여부 확인
         if result.data:
             return True
         return False
-
+   
     except Exception as e:
         st.error(f"데이터 저장 중 오류 발생: {str(e)}")
         return False

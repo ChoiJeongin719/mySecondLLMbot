@@ -309,20 +309,21 @@ def save_to_supabase(score=None):
         
         # 저장할 데이터 준비 (테이블 구조에 맞게 조정)
         data = {
+            # timestamp는 기본값 now()를 사용
             "user_id": st.session_state.user_id,
-            "participant_id": st.session_state.participant_id,
-            "started_at": start_time.isoformat(),
-            "finished_at": end_time.isoformat() if end_time else None,
-            "interaction_time": interaction_time,
+            "participant_id": st.session_state.participant_id,  # 참가자 ID 추가
+            "started_at": start_time.isoformat(),  # 시작 시간 추가 (ISO 형식 문자열로 변환)
+            "finished_at": end_time.isoformat() if end_time else None,  # 종료 시간 추가
+            "interaction_time": interaction_time,  # 초 단위 정수로 저장
             "total_tokens": st.session_state.token_usage["total_tokens"],
             "prompt_tokens": st.session_state.token_usage["prompt_tokens"],
             "completion_tokens": st.session_state.token_usage["completion_tokens"],
             "score": score,
-            "messages": st.session_state.messages,
-            "condition": 2
+            "messages": st.session_state.messages
+
         
-        # Supabase에 데이터 저장 (logs 테이블로 변경)
-        result = supabase.table("logs").insert(data).execute()
+        # Supabase에 데이터 저장
+        result = supabase.table("LLM1_R").insert(data).execute()
         
         # 저장 성공 여부 확인
         if result.data:
