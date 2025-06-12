@@ -288,7 +288,7 @@ However, cloning a deceased pet involves using biotechnology to create a new ani
         
     except Exception as e:
         st.error(f"Error generating response: {str(e)}")
-        return "I'm sorry, I encountered an error while processing your request."
+        return f"Error generating response: {str(e)}"
 
 def save_to_supabase(score=None):
     """Supabase에 데이터 저장"""
