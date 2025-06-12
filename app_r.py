@@ -576,27 +576,30 @@ def show_participant_id_page():
         st.markdown("### Please enter your participant ID")
         st.markdown("Enter the participant ID provided for this experiment.")
         
-        # Participant ID input field
+        # Participant ID input field (입력 예시 제거 가능)
         participant_id = st.text_input(
             "Participant ID", 
             value=st.session_state.participant_id,
-            key="participant_id_input",
-            placeholder="e.g., a001"
+            key="participant_id_input"
         )
         
         # Start experiment button
         if st.button("Start Experiment", type="primary", key="start_experiment_btn"):
-            # Validate participant ID
-            valid, message = validate_participant_id(participant_id)
-            
-            if valid:
-                st.session_state.participant_id = participant_id
-                st.session_state.app_state = "chat"
-                st.success(message)
-                time.sleep(1)  # Show success message briefly
-                st.rerun()
-            else:
-                st.error(message)
+            st.session_state.participant_id = participant_id
+
+            # DB에 참가자 번호 저장 (유효성 검사 없이)
+            try:
+                supabase.table("participants").insert({
+                    "id": participant_id,
+                    "created_at": datetime.datetime.now().isoformat()
+                }).execute()
+            except Exception as e:
+                st.warning(f"Could not save participant ID to DB: {e}")
+
+            st.session_state.app_state = "chat"
+            st.success("Participant ID saved. You can start chatting!")
+            time.sleep(1)
+            st.rerun()
 
 def show_complete_page():
     """완료 페이지 표시"""
