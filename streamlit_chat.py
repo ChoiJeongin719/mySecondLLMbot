@@ -63,7 +63,7 @@ def main():
         if st.session_state.turn < len(messages):
             st.session_state.turn += 1
         else:
-            st.success("대화가 종료되었습니다. 참여해 주셔서 감사합니다!")
+            st.success("대화가 종료되었습니다. 다시 설문으로 돌아가서 질문에 응답해주세요!")
             st.stop()
 
 
