@@ -1,5 +1,3 @@
-"""다음은 사용자와 챗봇이 대화를 나누는 상황입니다. 당신이 사용자라고 생각하고 대화를 읽어주세요."""
-
 import streamlit as st
 
 
@@ -19,6 +17,15 @@ def main():
     </style>
     """,
         unsafe_allow_html=True,
+    )
+
+    # 안내문구 헤더 박스 - 페이지 최상단에 한 번만 표시
+    st.markdown(
+        """
+        <div style='background-color:#f8f9fa; padding:16px 10px; border-radius:8px; margin-bottom:28px; border:1px solid #eee;'>
+            <h3 style='text-align:center; margin:0; color:#333;'>다음은 사용자와 챗봇이 대화를 나누는 상황입니다.<br>당신이 사용자라고 생각하고 대화를 읽어주세요.</h3>
+        </div>
+        """, unsafe_allow_html=True
     )
 
     messages = [
@@ -43,16 +50,6 @@ def main():
 
     if "turn" not in st.session_state:
         st.session_state.turn = 1  # Default to show the first message
-
-    # 헤더 박스(안내문구) - 페이지 최상단에 한 번만 표시
-    st.markdown(
-        """
-    <div style='background-color:#f8f9fa; padding:16px 10px; border-radius:8px; margin-bottom:28px; border:1px solid #eee;'>
-        <h3 style='text-align:center; margin:0; color:#333;'>다음은 사용자와 챗봇이 대화를 나누는 상황입니다.<br>당신이 사용자라고 생각하고 대화를 읽어주세요.</h3>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
 
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
