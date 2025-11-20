@@ -24,6 +24,7 @@ def main():
         """
         <div style='background-color:#f8f9fa; padding:16px 10px; border-radius:8px; margin-bottom:28px; border:1px solid #eee;'>
             <h3 style='text-align:center; margin:0; color:#333;'>다음은 사용자와 챗봇이 대화를 나누는 상황입니다.<br>당신이 사용자라고 생각하고 대화를 읽어주세요.</h3>
+            <p style='text-align:center; margin:8px 0 0 0; color:#666; font-size:15px;'>안내: 다크모드를 사용하지 말아주세요. 모바일에서도 가능하지만 PC에 최적화되어 있습니다.</p>
         </div>
         """, unsafe_allow_html=True
     )
